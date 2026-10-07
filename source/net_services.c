@@ -635,7 +635,23 @@ void send_mqtt_string_msg(struct mg_connection *nc, const char *dev_name, const 
   send_mqtt(nc, mqtt_pub_topic, msg);
 }
 
+static void send_mqtt_timestamp_msg(struct mg_connection *nc,
+                                    const char *topic, time_t timestamp)
+{
+  char value[32];
+  snprintf(value, sizeof(value), "%lld", (long long)timestamp);
+  send_mqtt_string_msg(nc, topic, value);
+}
+
 #define MQTT_TIMED_UPDATE 300
+#define MQTT_SOURCE_TIMESTAMP_UPDATE 30
+
+static bool source_timestamp_publish_due(time_t current, time_t published)
+{
+  return current > 0 &&
+         (published <= 0 || current < published ||
+          current - published >= MQTT_SOURCE_TIMESTAMP_UPDATE);
+}
 
 void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
 {
@@ -660,10 +676,25 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
     }
   //}
 
+  if (source_timestamp_publish_due(
+          _aqualink_data->panel_last_update,
+          _last_mqtt_aqualinkdata.panel_last_update)) {
+    _last_mqtt_aqualinkdata.panel_last_update = _aqualink_data->panel_last_update;
+    send_mqtt_timestamp_msg(nc, PANEL_LAST_UPDATE_TOPIC,
+                            _aqualink_data->panel_last_update);
+  }
+
   if (_aqualink_data->air_temp != TEMP_UNKNOWN && _aqualink_data->air_temp != _last_mqtt_aqualinkdata.air_temp) {
     _last_mqtt_aqualinkdata.air_temp = _aqualink_data->air_temp;
     send_mqtt_temp_msg(nc, AIR_TEMP_TOPIC, _aqualink_data->air_temp);
     //send_mqtt_temp_msg_new(nc, AIR_TEMPERATURE_TOPIC, _aqualink_data->air_temp);
+  }
+  if (source_timestamp_publish_due(
+          _aqualink_data->air_temp_last_update,
+          _last_mqtt_aqualinkdata.air_temp_last_update)) {
+    _last_mqtt_aqualinkdata.air_temp_last_update = _aqualink_data->air_temp_last_update;
+    send_mqtt_timestamp_msg(nc, AIR_TEMP_LAST_UPDATE_TOPIC,
+                            _aqualink_data->air_temp_last_update);
   }
 
   if (_aqualink_data->pool_temp != _last_mqtt_aqualinkdata.pool_temp) {
@@ -758,11 +789,9 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
   }
   if (_aqualink_data->chemistry_last_update > 0 &&
       _aqualink_data->chemistry_last_update != _last_mqtt_aqualinkdata.chemistry_last_update) {
-    char acquired_at[32];
-    snprintf(acquired_at, sizeof(acquired_at), "%lld",
-             (long long)_aqualink_data->chemistry_last_update);
     _last_mqtt_aqualinkdata.chemistry_last_update = _aqualink_data->chemistry_last_update;
-    send_mqtt_string_msg(nc, CHEM_LAST_UPDATE_TOPIC, acquired_at);
+    send_mqtt_timestamp_msg(nc, CHEM_LAST_UPDATE_TOPIC,
+                            _aqualink_data->chemistry_last_update);
   }
 
   // Salt Water Generator
@@ -813,6 +842,13 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
     }
   } else {
     //LOG(NET_LOG,LOG_DEBUG, "SWG Extended unknown\n");
+  }
+  if (source_timestamp_publish_due(
+          _aqualink_data->swg_last_update,
+          _last_mqtt_aqualinkdata.swg_last_update)) {
+    _last_mqtt_aqualinkdata.swg_last_update = _aqualink_data->swg_last_update;
+    send_mqtt_timestamp_msg(nc, SWG_LAST_UPDATE_TOPIC,
+                            _aqualink_data->swg_last_update);
   }
 
   if (READ_RSDEV_JXI && _aqualink_data->heater_err_status != _last_mqtt_aqualinkdata.heater_err_status) {
@@ -905,6 +941,17 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
         pumpStatus != _last_mqtt_aqualinkdata.pumps[i].status) {
       _last_mqtt_aqualinkdata.pumps[i].status = pumpStatus;
       send_mqtt_aux_msg(nc, _aqualink_data->pumps[i].button->name, PUMP_STATUS_TOPIC, pumpStatus);
+    }
+    if (source_timestamp_publish_due(
+            _aqualink_data->pumps[i].last_update,
+            _last_mqtt_aqualinkdata.pumps[i].last_update)) {
+      char topic[128];
+      snprintf(topic, sizeof(topic), "%s%s",
+               _aqualink_data->pumps[i].button->name, PUMP_LAST_UPDATE_TOPIC);
+      _last_mqtt_aqualinkdata.pumps[i].last_update =
+          _aqualink_data->pumps[i].last_update;
+      send_mqtt_timestamp_msg(nc, topic,
+                              _aqualink_data->pumps[i].last_update);
     }
   }
 
@@ -2408,5 +2455,3 @@ bool start_net_services(struct aqualinkdata *aqdata)
 
   return true;
 }
-
-

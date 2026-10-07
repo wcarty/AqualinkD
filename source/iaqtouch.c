@@ -30,6 +30,7 @@
 #include "rs_msg_utils.h"
 #include "devices_jandy.h"
 #include "chemistry.h"
+#include "telemetry.h"
 
 
 #define NEW_POLL_CYCLE
@@ -462,6 +463,7 @@ void iaqt_pump_update(struct aqualinkdata *aqdata, int updated) {
     updates = '\0';
   } else if (updated >=0 && updated < MAX_PUMPS) {
     updates |= bitmask[updated];
+    update_pump_timestamp(aqdata, updated, time(NULL));
     LOG(IAQT_LOG,LOG_DEBUG, "Got pump update message for pump %d\n",updated);
         if (updated < aqdata->num_pumps && isVBUTTON(aqdata->pumps[updated].button->special_mask) && aqdata->pumps[updated].button->led->state == OFF) {
           LOG(IAQT_LOG,LOG_DEBUG, "Turning on virtual button pump %d - %s\n",aqdata->pumps[updated].pumpIndex,aqdata->pumps[updated].button->label);
@@ -639,7 +641,8 @@ void passDeviceStatusPage(struct aqualinkdata *aqdata)
         LOG(IAQT_LOG,LOG_DEBUG, "Set swg %% to %d from message'%s'\n",aqdata->swg_percent,_deviceStatus[i]);
      } else if (rsm_strcmp(_deviceStatus[i],"salt") == 0) {
       SET_IF_CHANGED(aqdata->swg_ppm, rsm_atoi(&_deviceStatus[i][5]), aqdata->is_dirty);
-      LOG(IAQT_LOG,LOG_DEBUG, "Set swg PPM to %d from message'%s'\n",aqdata->swg_ppm,_deviceStatus[i]);
+     update_swg_timestamp(aqdata, time(NULL));
+     LOG(IAQT_LOG,LOG_DEBUG, "Set swg PPM to %d from message'%s'\n",aqdata->swg_ppm,_deviceStatus[i]);
      } else if (rsm_strcmp(_deviceStatus[i],"Boost Pool") == 0) {
       SET_IF_CHANGED(aqdata->boost, true, aqdata->is_dirty);
       // Let RS pickup time remaing message.
@@ -745,7 +748,7 @@ void processPage(struct aqualinkdata *aqdata)
 
       if (isPDA_PANEL) { // Set temp if PDA panel
        if (rsm_strcmp(_homeStatus[5],"Air Temp") == 0) {
-        SET_IF_CHANGED(aqdata->air_temp, atoi(_homeStatus[1]), aqdata->is_dirty);
+        update_air_temperature(aqdata, atoi(_homeStatus[1]), time(NULL));
         LOG(IAQT_LOG,LOG_DEBUG, "Air Temp set to %d\n",aqdata->air_temp);
        }
        if (rsm_strcmp(_homeStatus[4],"Pool Temp") == 0) {

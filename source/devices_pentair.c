@@ -26,6 +26,7 @@
 #include "devices_pentair.h"
 #include "utils.h"
 #include "packetLogger.h"
+#include "telemetry.h"
 
 bool processPentairPacket(unsigned char *packet, int packet_length, struct aqualinkdata *aqdata) 
 {
@@ -71,6 +72,7 @@ bool processPentairPacket(unsigned char *packet, int packet_length, struct aqual
         //aqdata->pumps[i].driveState = packet[PEN_DRIVE_STATE];
         SET_IF_CHANGED(aqdata->pumps[i].status, (packet[PEN_HI_B_STATUS] * 256) + packet[PEN_LO_B_STATUS], aqdata->is_dirty);
         SET_IF_CHANGED(aqdata->pumps[i].pressureCurve, packet[PEN_PPC], aqdata->is_dirty);
+        update_pump_timestamp(aqdata, i, time(NULL));
 
         // This is for RS485 mode only (no info from OneTouch or iAqualinkTouch)
         if (!isONET_ENABLED && !isIAQT_ENABLED) {

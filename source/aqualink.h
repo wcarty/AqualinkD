@@ -259,6 +259,7 @@ typedef struct pumpd
   int rpm;
   int gpm;
   int watts;
+  time_t last_update;
   int maxSpeed; // Max rpm or gpm depending on pump
   int minSpeed;
   unsigned char pumpID;
@@ -453,7 +454,9 @@ struct aqualinkdata
   aqkey aqbuttons[TOTAL_BUTTONS];
   unsigned short total_buttons;
   unsigned short virtual_button_start;
+  time_t panel_last_update;
   int air_temp;
+  time_t air_temp_last_update;
   int pool_temp;
   int spa_temp;
   int temp_units;
@@ -464,6 +467,7 @@ struct aqualinkdata
   int spa_htr_set_point;
   int swg_percent;
   int swg_ppm;
+  time_t swg_last_update;
   int chiller_set_point;
   aqkey *chiller_button;
   //heatmump_mode chiller_mode;

@@ -27,6 +27,7 @@
 #include "aq_mqtt.h"
 #include "packetLogger.h"
 #include "iaqualink.h"
+#include "telemetry.h"
 
 #include "json_messages.h"
 /*
@@ -268,6 +269,7 @@ bool processPacketFromSWG(unsigned char *packet, int packet_length, struct aqual
   }
 
   if (packet[PKT_CMD] == CMD_PPM) {
+    update_swg_timestamp(aqdata, time(NULL));
     //aqdata->ar_swg_device_status = packet[5];
     setSWGdeviceStatus(aqdata, JANDY_DEVICE, packet[5]);
     if (aqdata->swg_delayed_percent != TEMP_UNKNOWN && aqdata->ar_swg_device_status == SWG_STATUS_ON) { // We have a delayed % to set.
@@ -639,6 +641,7 @@ bool processPacketFromJandyPump(unsigned char *packet_buffer, int packet_length,
         LOG(DJAN_LOG, LOG_INFO, "Jandy Pump Status message = RPM %d\n",( (packet_buffer[EP_HI_B_RPM] * 256) + packet_buffer[EP_LO_B_RPM]) / 4 );
         //aqdata->pumps[i].rpm = ( (packet_buffer[EP_HI_B_RPM] * 256) + packet_buffer[EP_LO_B_RPM] ) / 4;
         SET_IF_CHANGED(aqdata->pumps[i].rpm, ( (packet_buffer[EP_HI_B_RPM] * 256) + packet_buffer[EP_LO_B_RPM] ) / 4, aqdata->is_dirty);
+        update_pump_timestamp(aqdata, i, time(NULL));
         found=true;
       }
     }
@@ -648,6 +651,7 @@ bool processPacketFromJandyPump(unsigned char *packet_buffer, int packet_length,
         LOG(DJAN_LOG, LOG_INFO, "Jandy Pump Status message = WATTS %d\n", (packet_buffer[EP_HI_B_WAT] * 256) + packet_buffer[EP_LO_B_WAT]);
         //aqdata->pumps[i].watts = (packet_buffer[EP_HI_B_WAT] * 256) + packet_buffer[EP_LO_B_WAT];
         SET_IF_CHANGED(aqdata->pumps[i].watts, (packet_buffer[EP_HI_B_WAT] * 256) + packet_buffer[EP_LO_B_WAT], aqdata->is_dirty);
+        update_pump_timestamp(aqdata, i, time(NULL));
         found=true;
       }
     }

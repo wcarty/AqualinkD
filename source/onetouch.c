@@ -33,6 +33,7 @@
 #include "rs_msg_utils.h"
 #include "devices_jandy.h"
 #include "chemistry.h"
+#include "telemetry.h"
 //#include "pda_menu.h"
 
 
@@ -575,6 +576,7 @@ bool get_aquapureinfo_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
       aqdata->swg_ppm = ppm;
       rtn = true;
     }
+    update_swg_timestamp(aqdata, time(NULL));
     LOG(ONET_LOG, LOG_INFO, "Aquapure SWG %d%, %d PPM\n", swgp, ppm);
   }
 
@@ -745,6 +747,7 @@ void pump_update(struct aqualinkdata *aqdata, int updated) {
     updates = '\0';
   } else if (updated >=0 && updated < MAX_PUMPS) {
      updates |= bitmask[updated];
+     update_pump_timestamp(aqdata, updated, time(NULL));
   }
 }
 

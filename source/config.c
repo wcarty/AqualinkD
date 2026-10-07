@@ -1467,6 +1467,7 @@ pump_detail *getPumpFromButtonID(struct aqualinkdata *aqdata, aqkey *button)
     aqdata->pumps[aqdata->num_pumps].rpm = TEMP_UNKNOWN;
     aqdata->pumps[aqdata->num_pumps].watts = TEMP_UNKNOWN;
     aqdata->pumps[aqdata->num_pumps].gpm = TEMP_UNKNOWN;
+    aqdata->pumps[aqdata->num_pumps].last_update = 0;
     aqdata->pumps[aqdata->num_pumps].pStatus = PS_OFF;
     aqdata->pumps[aqdata->num_pumps].pumpIndex = 0;
     aqdata->pumps[aqdata->num_pumps].maxSpeed = TEMP_UNKNOWN;
@@ -1530,6 +1531,7 @@ pump_detail *getpump(struct aqualinkdata *aqdata, int button)
     aqdata->pumps[aqdata->num_pumps].rpm = TEMP_UNKNOWN;
     aqdata->pumps[aqdata->num_pumps].watts = TEMP_UNKNOWN;
     aqdata->pumps[aqdata->num_pumps].gpm = TEMP_UNKNOWN;
+    aqdata->pumps[aqdata->num_pumps].last_update = 0;
     aqdata->pumps[aqdata->num_pumps].pStatus = PS_OFF;
     aqdata->pumps[aqdata->num_pumps].pumpIndex = 0;
     //pumpType

@@ -33,6 +33,7 @@
 #include "aq_timer.h"
 #include "aq_programmer.h"
 #include "rs_msg_utils.h"
+#include "telemetry.h"
 #include "color_lights.h"
 #include "iaqualink.h"
 #include "aq_panel.h"
@@ -750,10 +751,23 @@ int build_aqualink_status_JSON(struct aqualinkdata *aqdata, char* buffer, int si
       length += sprintf(buffer+length, ",\"chiller_mode\":\"%s\"",((altlabel_detail *)aqdata->chiller_button->special_mask_ptr)->in_alt_mode?"cool":"heat");
   }
   
+  if (aqdata->panel_last_update > 0) {
+    length += sprintf(buffer+length, ",\"panel_last_update\":%lld",
+                      (long long)aqdata->panel_last_update);
+    length += sprintf(buffer+length, ",\"panel_age_seconds\":%lld",
+                      source_age_seconds(aqdata->panel_last_update, time(NULL)));
+  }
+
   if ( aqdata->air_temp == TEMP_UNKNOWN )
     length += sprintf(buffer+length, ",\"air_temp\":\" \"");
   else
     length += sprintf(buffer+length, ",\"air_temp\":\"%d\"",aqdata->air_temp );
+  if (aqdata->air_temp_last_update > 0) {
+    length += sprintf(buffer+length, ",\"air_temp_last_update\":%lld",
+                      (long long)aqdata->air_temp_last_update);
+    length += sprintf(buffer+length, ",\"air_temp_age_seconds\":%lld",
+                      source_age_seconds(aqdata->air_temp_last_update, time(NULL)));
+  }
   
   if ( aqdata->pool_temp == TEMP_UNKNOWN )
     length += sprintf(buffer+length, ",\"pool_temp\":\" \"");
@@ -800,6 +814,12 @@ int build_aqualink_status_JSON(struct aqualinkdata *aqdata, char* buffer, int si
     length += sprintf(buffer+length, ",\"chem_age_seconds\":%lld",
                       chemistry_age_seconds(aqdata->chemistry_last_update, time(NULL)));
   }
+  if (aqdata->swg_last_update > 0) {
+    length += sprintf(buffer+length, ",\"swg_last_update\":%lld",
+                      (long long)aqdata->swg_last_update);
+    length += sprintf(buffer+length, ",\"swg_age_seconds\":%lld",
+                      source_age_seconds(aqdata->swg_last_update, time(NULL)));
+  }
 
   //if ( READ_RSDEV_SWG )
     length += sprintf(buffer+length, ",\"swg_fullstatus\": \"%d\"", aqdata->ar_swg_device_status);
@@ -845,10 +865,17 @@ printf("Pump Type %d\n",aqdata->pumps[i].pumpType);
     */
     //if (aqdata->pumps[i].pumpType != PT_UNKNOWN && (aqdata->pumps[i].rpm != TEMP_UNKNOWN || aqdata->pumps[i].gpm != TEMP_UNKNOWN || aqdata->pumps[i].watts != TEMP_UNKNOWN)) {
     if (aqdata->pumps[i].pumpType != PT_UNKNOWN) {
-      length += sprintf(buffer+length, "\"Pump_%d\":{\"name\":\"%s\",\"id\":\"%s\",\"RPM\":\"%d\",\"GPM\":\"%d\",\"Watts\":\"%d\",\"Pump_Type\":\"%s\",\"Status\":\"%d\"},",
+      length += sprintf(buffer+length, "\"Pump_%d\":{\"name\":\"%s\",\"id\":\"%s\",\"RPM\":\"%d\",\"GPM\":\"%d\",\"Watts\":\"%d\",\"Pump_Type\":\"%s\",\"Status\":\"%d\"",
                         i+1,aqdata->pumps[i].button->label,aqdata->pumps[i].button->name,aqdata->pumps[i].rpm,aqdata->pumps[i].gpm,aqdata->pumps[i].watts,
                         (aqdata->pumps[i].pumpType==VFPUMP?"vfPump":(aqdata->pumps[i].pumpType==VSPUMP?"vsPump":"ePump")),
                         getPumpStatus(i, aqdata));
+      if (aqdata->pumps[i].last_update > 0) {
+        length += sprintf(buffer+length, ",\"last_update\":%lld,\"age_seconds\":%lld",
+                          (long long)aqdata->pumps[i].last_update,
+                          source_age_seconds(aqdata->pumps[i].last_update,
+                                             time(NULL)));
+      }
+      length += sprintf(buffer+length, "},");
     }
   }
   if (buffer[length-1] == ',')

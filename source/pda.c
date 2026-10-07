@@ -31,6 +31,7 @@
 #include "packetLogger.h"
 #include "devices_jandy.h"
 #include "rs_msg_utils.h"
+#include "telemetry.h"
 
 // Used in equiptment_update_cycle() for additional items on EQUIPMENT STATUS
 // TOTAL_BUTTONS is at most 20 so bits 21-31 should be available
@@ -261,7 +262,7 @@ void process_pda_packet_msg_long_temp(const char *msg)
     SET_IF_CHANGED(_aqualink_data->temp_units, FAHRENHEIT, _aqualink_data->is_dirty); // Force FAHRENHEIT
   }
   if (stristr(pda_m_line(1), "AIR") != NULL)
-    SET_IF_CHANGED(_aqualink_data->air_temp, atoi(msg), _aqualink_data->is_dirty);
+    update_air_temperature(_aqualink_data, atoi(msg), time(NULL));
 
   if (stristr(pda_m_line(1), "SPA") != NULL)
   {
@@ -593,6 +594,7 @@ void pda_pump_update(struct aqualinkdata *aqdata, int updated) {
     updates = '\0';
   } else if (updated >=0 && updated < MAX_PUMPS) {
      updates |= bitmask[updated];
+     update_pump_timestamp(aqdata, updated, time(NULL));
   }
 }
 
@@ -794,6 +796,7 @@ void process_pda_packet_msg_long_equiptment_status(const char *msg_line, int lin
   else if ((index = rsm_strncasestr(msg, MSG_SWG_PPM, AQ_MSGLEN)) != NULL)
   {
     SET_IF_CHANGED(_aqualink_data->swg_ppm, atoi(index + strlen(MSG_SWG_PPM)), _aqualink_data->is_dirty);
+    update_swg_timestamp(_aqualink_data, time(NULL));
     //if (_aqualink_data->ar_swg_status == SWG_STATUS_OFF) {_aqualink_data->ar_swg_status = SWG_STATUS_ON;}
     LOG(PDA_LOG,LOG_DEBUG, "SALT = %d\n", _aqualink_data->swg_ppm);
   }  
@@ -1094,4 +1097,3 @@ bool process_pda_packet(unsigned char *packet, int length)
 
   return rtn;
 }
-

@@ -33,6 +33,7 @@
 #include "mongoose.h"
 #include "aqualink.h"
 #include "utils.h"
+#include "telemetry.h"
 #include "config.h"
 #include "aq_serial.h"
 #include "aq_panel.h"
@@ -826,7 +827,9 @@ void main_loop()
   _aqualink_data.is_display_message_programming = false;
   //_aqualink_data.simulate_panel = false;
   _aqualink_data.active_thread.thread_id = 0;
+  _aqualink_data.panel_last_update = 0;
   _aqualink_data.air_temp = TEMP_UNKNOWN;
+  _aqualink_data.air_temp_last_update = 0;
   _aqualink_data.pool_temp = TEMP_UNKNOWN;
   _aqualink_data.spa_temp = TEMP_UNKNOWN;
   _aqualink_data.frz_protect_set_point = TEMP_UNKNOWN;
@@ -837,6 +840,7 @@ void main_loop()
   _aqualink_data.unactioned.type = NO_ACTION;
   _aqualink_data.swg_percent = TEMP_UNKNOWN;
   _aqualink_data.swg_ppm = TEMP_UNKNOWN;
+  _aqualink_data.swg_last_update = 0;
   _aqualink_data.ar_swg_device_status = SWG_STATUS_UNKNOWN;
   _aqualink_data.heater_err_status = NUL; // 0x00 is no error
   _aqualink_data.swg_led_state = LED_S_UNKNOWN;
@@ -863,6 +867,7 @@ void main_loop()
     _aqualink_data.pumps[i].rpm = TEMP_UNKNOWN;
     _aqualink_data.pumps[i].gpm = TEMP_UNKNOWN;
     _aqualink_data.pumps[i].watts = TEMP_UNKNOWN;
+    _aqualink_data.pumps[i].last_update = 0;
     _aqualink_data.pumps[i].mode = TEMP_UNKNOWN;
     //_aqualink_data.pumps[i].driveState = TEMP_UNKNOWN;
     _aqualink_data.pumps[i].status = TEMP_UNKNOWN;
@@ -1299,6 +1304,7 @@ void main_loop()
            ))
       {
         AddAQDstatusMask(CONNECTED);
+        update_panel_timestamp(&_aqualink_data, time(NULL));
         switch(getJandyDeviceType(packet_buffer[PKT_DEST])){
           case ALLBUTTON:
             process_allbutton_packet(packet_buffer, packet_length, &_aqualink_data);
@@ -1424,4 +1430,3 @@ void debugtestePump()
   processJandyPacket(fromPumpRPM, 11, &_aqualink_data);
 }
 */
-
