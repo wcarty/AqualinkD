@@ -848,6 +848,7 @@ void main_loop()
   _aqualink_data.open_websockets = 0;
   _aqualink_data.ph = TEMP_UNKNOWN;
   _aqualink_data.orp = TEMP_UNKNOWN;
+  _aqualink_data.chemistry_last_update = 0;
   _aqualink_data.simulator_id = NUL;
   _aqualink_data.simulator_active = SIM_NONE;
   _aqualink_data.boost_duration = 0;
@@ -1423,5 +1424,4 @@ void debugtestePump()
   processJandyPacket(fromPumpRPM, 11, &_aqualink_data);
 }
 */
-
 

@@ -32,6 +32,7 @@
 #define CHRM_PH_F_TOPIC CHEM_TOPIC "/pH_f"
 #define CHEM_ORP_TOPIC CHEM_TOPIC "/ORP"
 #define CHRM_ORP_F_TOPIC CHEM_TOPIC "/ORP_f"
+#define CHEM_LAST_UPDATE_TOPIC CHEM_TOPIC "/last_update"
 
 #define LXI_TOPIC "LXi"
 #define LXI_STATUS LXI_TOPIC "/Status"

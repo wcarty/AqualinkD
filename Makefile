@@ -68,8 +68,8 @@ endif
 
 
 # Main source files
-SRCS = aqualinkd.c utils.c config.c aq_serial.c aq_panel.c aq_programmer.c allbutton.c allbutton_aq_programmer.c net_services.c net_interface.c json_messages.c rs_msg_utils.c\
-       onetouch.c onetouch_aq_programmer.c iaqtouch.c iaqtouch_aq_programmer.c iaqualink.c\
+SRCS = aqualinkd.c utils.c config.c aq_serial.c aq_panel.c aq_programmer.c allbutton.c allbutton_aq_programmer.c chemistry.c net_services.c net_interface.c json_messages.c rs_msg_utils.c\
+       onetouch.c onetouch_aq_programmer.c iaqtouch.c iaqtouch_chemistry.c iaqtouch_aq_programmer.c iaqualink.c\
        devices_jandy.c packetLogger.c devices_pentair.c color_lights.c serialadapter.c aq_timer.c aq_scheduler.c web_config.c\
        rs485mon.c mongoose.c mqtt_discovery.c simulator.c sensors.c aq_systemutils.c timespec_subtract.c auto_configure.c
 
@@ -406,5 +406,3 @@ clean: clean-buildfiles
 
 clean-buildfiles:
 	$(RM) $(wildcard *.o) $(wildcard *~) $(OBJ_FILES) $(DBG_OBJ_FILES) $(SL_OBJ_FILES) $(DD_OBJ_FILES) $(DR_OBJ_FILES) $(OBJ_FILES_ARMHF) $(OBJ_FILES_ARM64) $(OBJ_FILES_AMD64) $(SL_OBJ_FILES_ARMHF) $(SL_OBJ_FILES_ARM64) $(SL_OBJ_FILES_AMD64)
-
-

@@ -250,6 +250,18 @@ const char *HASSIO_SENSOR_DISCOVER = "{"
     "\"icon\": \"%s\""
 "}";
 
+const char *HASSIO_TIMESTAMP_SENSOR_DISCOVER = "{"
+    "\"device\": {" HASS_DEVICE "},"
+    "\"availability\": {" HASS_AVAILABILITY "},"
+    "\"type\": \"sensor\","
+    "\"unique_id\": \"aqualinkd_%s\","
+    "\"name\": \"%s\","
+    "\"state_topic\": \"%s/%s\","
+    "\"value_template\": \"{{ as_datetime(value | int) }}\","
+    "\"device_class\": \"timestamp\","
+    "\"icon\": \"%s\""
+"}";
+
 const char *HASSIO_SERVICE_MODE_ENUM_SENSOR_DISCOVER = "{"
     "\"device\": {" HASS_DEVICE "},"
     "\"availability\": {" HASS_AVAILABILITY "},"
@@ -740,6 +752,15 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
     send_mqtt(nc, topic, msg);
   }
 
+  rsm_char_replace(idbuf, CHEM_LAST_UPDATE_TOPIC, "/", "_");
+  sprintf(msg, HASSIO_TIMESTAMP_SENSOR_DISCOVER, connections,
+          _aqconfig_.mqtt_aq_topic, idbuf, "Chemistry Last Acquisition",
+          _aqconfig_.mqtt_aq_topic, CHEM_LAST_UPDATE_TOPIC,
+          "mdi:clock-check-outline");
+  sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config",
+          _aqconfig_.mqtt_discovery_topic, idbuf);
+  send_mqtt(nc, topic, msg);
+
   // Misc stuff
   sprintf(msg, HASSIO_SERVICE_MODE_ENUM_SENSOR_DISCOVER,connections,_aqconfig_.mqtt_aq_topic,SERVICE_MODE_TOPIC,"Service Mode",_aqconfig_.mqtt_aq_topic,SERVICE_MODE_TOPIC, "mdi:account-wrench");
   sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config", _aqconfig_.mqtt_discovery_topic, SERVICE_MODE_TOPIC);
@@ -785,4 +806,3 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
   }
    
 }
-

@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 #include "aq_serial.h"
 #include "aq_programmer.h"
 #include "sensors.h"
@@ -482,6 +483,7 @@ struct aqualinkdata
   int boost_linked_device;
   float ph;
   int orp;
+  time_t chemistry_last_update;
 
   // Below this line is not state related.
   //aqkey *orderedbuttons[TOTAL_BUTTONS]; // Future to reduce RS4,6,8,12,16 & spa buttons

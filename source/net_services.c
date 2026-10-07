@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <syslog.h>
+#include <time.h>
 
 #ifdef AQ_MANAGER
 #include <systemd/sd-journal.h>
@@ -634,31 +635,14 @@ void send_mqtt_string_msg(struct mg_connection *nc, const char *dev_name, const 
   send_mqtt(nc, mqtt_pub_topic, msg);
 }
 
-#define MQTT_TIMED_UDATE 300 //(in seconds)
+#define MQTT_TIMED_UPDATE 300
 
 void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
 {
   int i;
   const char *status;
   int pumpStatus;
-  static struct timespec last_update_timestamp = {0, 0};
-
-
-  // We get called about every second, so check time every MQTT_TIMED_UDATE / 2
-  if (_aqconfig_.mqtt_timed_update) {
-    static int cnt=0;
-    if (cnt >= (MQTT_TIMED_UDATE/2)) {
-      static time_t last_full_update = 0;
-      time_t now = time(0); // get time now
-      if ( (int)difftime(now, last_full_update) > MQTT_TIMED_UDATE ) {
-        reset_last_mqtt_status();
-        memcpy(&last_full_update, &now, sizeof(time_t));
-      }
-      cnt = 0;
-    } else {
-      cnt++;
-    }
-  }
+  static struct timespec last_timer_update_timestamp = {0, 0};
 
 //LOG(NET_LOG,LOG_INFO, "mqtt_broadcast_aqualinkstate: START\n");
 
@@ -772,6 +756,14 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
     send_mqtt_numeric_msg(nc, CHEM_ORP_TOPIC, _aqualink_data->orp);
     send_mqtt_float_msg(nc, CHRM_ORP_F_TOPIC, roundf(degFtoC(_aqualink_data->orp)));
   }
+  if (_aqualink_data->chemistry_last_update > 0 &&
+      _aqualink_data->chemistry_last_update != _last_mqtt_aqualinkdata.chemistry_last_update) {
+    char acquired_at[32];
+    snprintf(acquired_at, sizeof(acquired_at), "%lld",
+             (long long)_aqualink_data->chemistry_last_update);
+    _last_mqtt_aqualinkdata.chemistry_last_update = _aqualink_data->chemistry_last_update;
+    send_mqtt_string_msg(nc, CHEM_LAST_UPDATE_TOPIC, acquired_at);
+  }
 
   // Salt Water Generator
   if (_aqualink_data->swg_led_state != LED_S_UNKNOWN) {
@@ -863,12 +855,12 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
       clock_gettime(CLOCK_MONOTONIC, &current_time);
 
       // Calculate the time difference in nanoseconds
-      long long time_difference_ns = (current_time.tv_sec - last_update_timestamp.tv_sec) * 1000000000LL + (current_time.tv_nsec - last_update_timestamp.tv_nsec);
+      long long time_difference_ns = (current_time.tv_sec - last_timer_update_timestamp.tv_sec) * 1000000000LL + (current_time.tv_nsec - last_timer_update_timestamp.tv_nsec);
 
       // Check if 10 seconds (10 * 10^9 nanoseconds) have passed
-      if (time_difference_ns >= 10000000000LL || last_update_timestamp.tv_sec == 0) {
+      if (time_difference_ns >= 10000000000LL || last_timer_update_timestamp.tv_sec == 0) {
         send_mqtt_timer_state_msg(nc, _aqualink_data->aqbuttons[i].name, &_aqualink_data->aqbuttons[i]);
-        last_update_timestamp = current_time;
+        last_timer_update_timestamp = current_time;
       }
     }
   }
@@ -2165,6 +2157,35 @@ void reset_last_mqtt_status()
 
 }
 
+static bool mqtt_timed_update_due()
+{
+  static struct timespec last_update = {0, 0};
+
+  if (!_aqconfig_.mqtt_timed_update) {
+    last_update.tv_sec = 0;
+    last_update.tv_nsec = 0;
+    return false;
+  }
+
+  struct timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+    return false;
+  }
+
+  if (last_update.tv_sec == 0) {
+    last_update = now;
+    return false;
+  }
+
+  if (now.tv_sec - last_update.tv_sec < MQTT_TIMED_UPDATE) {
+    return false;
+  }
+
+  last_update = now;
+  reset_last_mqtt_status();
+  return true;
+}
+
 void start_mqtt(struct mg_mgr *mgr) {
   
   //generate_mqtt_id(_aqconfig_.mqtt_ID, MQTT_ID_LEN);
@@ -2302,7 +2323,8 @@ void *net_services_thread( void *ptr )
   {
     mg_mgr_poll(&_mgr, (_aqualink_data->simulator_active != SIM_NONE)?10:100);
 
-    if (aqdata->is_dirty == true /*|| _broadcast == true*/) {
+    bool timed_mqtt_update = mqtt_timed_update_due();
+    if (aqdata->is_dirty == true || timed_mqtt_update) {
       _broadcast_aqualinkstate(_mgr.conns);
       CLEAR_DIRTY(aqdata->is_dirty);
 #ifdef DEBUG_SET_IF_CHANGED
@@ -2386,7 +2408,5 @@ bool start_net_services(struct aqualinkdata *aqdata)
 
   return true;
 }
-
-
 
 

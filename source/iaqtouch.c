@@ -23,11 +23,13 @@
 #include "utils.h"
 #include "packetLogger.h"
 #include "iaqtouch.h"
+#include "iaqtouch_chemistry.h"
 #include "iaqtouch_aq_programmer.h"
 #include "iaqualink.h"
 #include "aq_programmer.h"
 #include "rs_msg_utils.h"
 #include "devices_jandy.h"
+#include "chemistry.h"
 
 
 #define NEW_POLL_CYCLE
@@ -615,21 +617,13 @@ void passDeviceStatusPage(struct aqualinkdata *aqdata)
                      ORP 750/PH 7.0
     */
     if (rsm_strcmp(_deviceStatus[i],"ORP") == 0) {
-      char *oi = rsm_strncasestr(_deviceStatus[i], "ORP", AQ_MSGLEN);
-      char *pi = rsm_strncasestr(_deviceStatus[i], "PH", AQ_MSGLEN);
-      if (oi != NULL && pi != NULL) {
-        int orp = rsm_atoi(oi+4);
-        float ph = rsm_atof(pi+3);
-        if (orp > 0 && ph > 0) {
-          if (aqdata->ph != ph || aqdata->orp != orp) {
-            SET_IF_CHANGED(aqdata->ph, ph, aqdata->is_dirty);
-            SET_IF_CHANGED(aqdata->orp, orp, aqdata->is_dirty);
-          }
-          LOG(IAQT_LOG,LOG_INFO, "Set Cem ORP = %d PH = %f from message '%s'\n",orp,ph,_deviceStatus[i]);
-        } else {
-          // Didn't understand message, not
-          LOG(IAQT_LOG,LOG_DEBUG, "Could not extract ORP & PH from message '%s'\n",_deviceStatus[i]);
-        }
+      int orp;
+      float ph;
+      if (iaqt_parse_chemistry_message(_deviceStatus[i], &orp, &ph)) {
+        update_chemistry_reading(aqdata, orp, ph, time(NULL));
+        LOG(IAQT_LOG,LOG_INFO, "Set Cem ORP = %d PH = %f from message '%s'\n",orp,ph,_deviceStatus[i]);
+      } else {
+        LOG(IAQT_LOG,LOG_DEBUG, "Could not extract ORP & PH from message '%s'\n",_deviceStatus[i]);
       }
     }
     
@@ -848,6 +842,7 @@ int get_iaqTouchPollCounter()
 bool process_iaqtouch_packet(unsigned char *packet, int length, struct aqualinkdata *aqdata)
 {
   static bool gotInit = false; 
+  static struct iaqt_chemistry_request chemistry_request = { .pending = true };
   //static int _pollCnt = 0;
   //static int probesSinceLastPageCMD=0;
   static bool gotStatus = true;
@@ -1068,12 +1063,21 @@ if not programming && poll packet {
   So why did I update this to sit on devices page???????????
   RS16 should also probably sit on devices page.
 }*/
-    if (in_programming_mode(aqdata) == false) {
+    bool programming = in_programming_mode(aqdata);
+    if (iaqt_chemistry_request_due(&chemistry_request, aqdata->ph, aqdata->orp,
+                                   gotInit, programming)) {
+      bool accepted = iaqt_queue_cmd(KEY_IAQTCH_STATUS);
+      iaqt_chemistry_request_result(&chemistry_request, accepted);
+      if (accepted)
+        return false;
+    }
+
+    if (programming == false) {
       //LOG(IAQT_LOG,LOG_DEBUG, "Poll counter = %d\n",_pollCnt);
 
       if (_currentPage == IAQ_PAGE_HOME) {
-        iaqt_queue_cmd(KEY_IAQTCH_HOMEP_KEY08); // This is "other devices on/off" page
-        _pollCnt = 0;
+        bool accepted = iaqt_queue_cmd(KEY_IAQTCH_HOMEP_KEY08); // This is "other devices on/off" page
+        iaqt_reset_poll_counter_if_accepted(&_pollCnt, accepted);
       }
 
       //if ( (isPDA_PANEL || isVirtualButtonEnabled() || PANEL_SIZE() >= 16) && !in_iaqt_programming_mode(aqdata) ) {
@@ -1121,7 +1125,7 @@ if not programming && poll packet {
                   (_currentPage == IAQ_PAGE_DEVICES || _currentPage == IAQ_PAGE_DEVICES_REV_Yg) ) {
         iaqt_queue_cmd(KEY_IAQTCH_STATUS); // This will force us to go to status, then it'll jump back to devices, then force status again
       }
-    } else if (in_programming_mode(aqdata) == true) {
+    } else {
       // Set count to something close to max, so we will pull latest info once programming has finished.
       // This is good for VSP GPM programming as it takes number of seconds to register once finished programming.
       // -5 seems to be too quick for VSP/GPM so using 10

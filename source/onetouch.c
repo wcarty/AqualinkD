@@ -32,6 +32,7 @@
 #include "config.h"
 #include "rs_msg_utils.h"
 #include "devices_jandy.h"
+#include "chemistry.h"
 //#include "pda_menu.h"
 
 
@@ -518,13 +519,7 @@ bool get_chemlinkinfo_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
     char *indx = strchr(_menu[menuLineIdx + 1], '/');
     float ph = atof(indx + 3);
     LOG(ONET_LOG, LOG_INFO, "Cemlink ORP = %d PH = %f\n", orp, ph);
-    if (aqdata->ph != ph || aqdata->orp != orp)
-    {
-      SET_IF_CHANGED(aqdata->ph, ph, aqdata->is_dirty);
-      SET_IF_CHANGED(aqdata->orp, orp, aqdata->is_dirty);
-      return true;
-    }
-    return false;
+    return update_chemistry_reading(aqdata, orp, ph, time(NULL));
   }
   LOG(ONET_LOG, LOG_WARNING, "Did not understand Chemlink message '%s'\n",_menu[menuLineIdx + 1]);
   return false;
@@ -541,12 +536,11 @@ bool get_chemsensors_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
     int orp = rsm_atoi(oi+4);
     float ph = rsm_atof(pi+3);
     if (orp > 0 && ph > 0) {
-      if (aqdata->ph != ph || aqdata->orp != orp) {
-        SET_IF_CHANGED(aqdata->ph, ph, aqdata->is_dirty);
-        SET_IF_CHANGED(aqdata->orp, orp, aqdata->is_dirty);
+      bool changed = update_chemistry_reading(aqdata, orp, ph, time(NULL));
+      if (changed) {
         LOG(ONET_LOG,LOG_INFO, "Set Cem ORP = %d PH = %f from message '%s'\n",orp,ph,_menu[menuLineIdx]);
-        return true;
       }
+      return changed;
     } else {
           // Didn't understand message, not
       LOG(ONET_LOG,LOG_DEBUG, "Could not extract ORP & PH from message '%s'\n",_menu[menuLineIdx]);
