@@ -186,7 +186,7 @@ RSMON_AMD64 = ./release/rs485mon-amd64
 
 
 # Rules with no targets
-.PHONY: clean clean-buildfiles buildrelease release install
+.PHONY: clean clean-buildfiles buildrelease release install test
 
 # Default target
 .DEFAULT_GOAL := all
@@ -236,6 +236,23 @@ debugbuild: armhf arm64
 all:    $(MAIN) $(RSMON)
 	$(info $(MAIN) has been compiled)
 	$(info $(RSMON) has been compiled)
+
+TEST_BIN_DIR := $(OBJ_DIR)/tests
+TEST_TELEMETRY := $(TEST_BIN_DIR)/test_telemetry
+TEST_IAQ_CHEMISTRY := $(TEST_BIN_DIR)/test_iaqtouch_chemistry
+
+$(TEST_BIN_DIR):
+	$(MKDIR) $@
+
+$(TEST_TELEMETRY): tests/test_telemetry.c source/telemetry.c | $(TEST_BIN_DIR)
+	$(CC) $(GCCFLAGS) $(INCLUDES) -o $@ $^
+
+$(TEST_IAQ_CHEMISTRY): tests/test_iaqtouch_chemistry.c source/iaqtouch_chemistry.c source/chemistry.c | $(TEST_BIN_DIR)
+	$(CC) $(GCCFLAGS) $(INCLUDES) -o $@ $^
+
+test: $(TEST_TELEMETRY) $(TEST_IAQ_CHEMISTRY)
+	$(TEST_TELEMETRY)
+	$(TEST_IAQ_CHEMISTRY)
 
 slog:	$(RSMON)
 	$(info $(RSMON) has been compiled)

@@ -113,8 +113,12 @@ void start_timer(struct aqualinkdata *aqdata, int deviceIndex, int duration_min,
   tmthread->next = NULL;
   tmthread->started_at = time(0); // This will get reset once we actually start. But need it here incase someone calls get_timer_left() before we start
 
-  if( pthread_create( &tmthread->thread_id , NULL ,  timer_worker, (void*)tmthread) < 0) {
-    LOG(TIMR_LOG, LOG_ERR, "could not create timer thread for button '%s'\n",button->name);
+  int rc = pthread_create(&tmthread->thread_id, NULL, timer_worker,
+                          (void *)tmthread);
+  if (rc != 0) {
+    LOG(TIMR_LOG, LOG_ERR,
+        "could not create timer thread for button '%s': %s\n",
+        button->name, strerror(rc));
     free(tmthread);
     return;
   }

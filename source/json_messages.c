@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -716,15 +717,58 @@ int build_aqualink_aqmanager_JSON(struct aqualinkdata *aqdata, char* buffer, int
   return length;
 }
 
+static int bounded_status_sprintf(char *buffer, int size, char *destination,
+                                  bool *overflow, const char *format, ...)
+{
+  if (buffer == NULL || destination == NULL || overflow == NULL || size <= 0) {
+    if (overflow != NULL)
+      *overflow = true;
+    return 0;
+  }
+
+  ptrdiff_t used = destination - buffer;
+  if (used < 0 || used >= size) {
+    *overflow = true;
+    return 0;
+  }
+
+  va_list args;
+  va_start(args, format);
+  int available = size - (int)used;
+  int written = vsnprintf(destination, available, format, args);
+  va_end(args);
+
+  if (written < 0) {
+    *overflow = true;
+    return 0;
+  }
+  if (written >= available) {
+    *overflow = true;
+    return available - 1;
+  }
+  return written;
+}
+
 int build_aqualink_status_JSON(struct aqualinkdata *aqdata, char* buffer, int size)
 {
   //strncpy(buffer, test_message, strlen(test_message)+1);
   //return strlen(test_message);
   //char buffer2[600];
   
+  if (aqdata == NULL || buffer == NULL || size <= 0)
+    return 0;
+  if (size < 128) {
+    int written = snprintf(buffer, size, "{\"type\":\"status\","
+                           "\"status\":\"error\"}");
+    return written < size ? written : size - 1;
+  }
   memset(&buffer[0], 0, size);
   int length = 0;
   int i;
+  bool overflow = false;
+
+#define sprintf(destination, ...) \
+  bounded_status_sprintf(buffer, size, destination, &overflow, __VA_ARGS__)
 
   length += sprintf(buffer+length, "{\"type\": \"status\"");
   length += sprintf(buffer+length, ",\"status\":\"%s\"",getStatus(aqdata) );
@@ -956,8 +1000,19 @@ printf("Pump Type %d\n",aqdata->pumps[i].pumpType);
   length += sprintf(buffer+length, "}" );
   
   buffer[length] = '\0';
-  
-  return strlen(buffer);
+
+#undef sprintf
+
+  if (overflow) {
+    LOG(NET_LOG, LOG_ERR,
+        "Status JSON exceeded the %d-byte output buffer\n", size);
+    int written = snprintf(buffer, size,
+                           "{\"type\":\"status\",\"status\":\"error\","
+                           "\"message\":\"status response too large\"}");
+    return written < size ? written : size - 1;
+  }
+
+  return length;
 }
 
 int build_aux_labels_JSON(struct aqualinkdata *aqdata, char* buffer, int size)

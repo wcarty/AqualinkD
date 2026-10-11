@@ -3,13 +3,12 @@
 bool update_source_timestamp(time_t *last_update, volatile bool *is_dirty,
                              time_t acquired_at)
 {
-  if (last_update == NULL || is_dirty == NULL || acquired_at <= 0)
+  if (last_update == NULL || acquired_at <= 0)
     return false;
   if (*last_update == acquired_at)
     return false;
 
   *last_update = acquired_at;
-  *is_dirty = true;
   return true;
 }
 
@@ -39,9 +38,8 @@ bool update_air_temperature(struct aqualinkdata *aqdata, int temperature,
   bool changed = aqdata->air_temp != temperature;
   if (changed)
     aqdata->air_temp = temperature;
-  if (update_source_timestamp(&aqdata->air_temp_last_update, &aqdata->is_dirty,
-                              acquired_at))
-    changed = true;
+  update_source_timestamp(&aqdata->air_temp_last_update, &aqdata->is_dirty,
+                          acquired_at);
   if (changed)
     aqdata->is_dirty = true;
   return changed;

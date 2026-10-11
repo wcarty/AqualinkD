@@ -736,8 +736,12 @@ void _aq_programmer_(program_type r_type, char *args, aqkey *button, int value, 
       break;
     default:
       // NSF REALLY Should check that _prog_functions[type] is valid.
-      if( pthread_create( &programmingthread->thread_id , NULL ,  _prog_functions[type], (void*)programmingthread) < 0) {
-        LOG(PROG_LOG, LOG_ERR, "could not create thread\n");
+      int rc = pthread_create(&programmingthread->thread_id, NULL,
+                              _prog_functions[type],
+                              (void *)programmingthread);
+      if (rc != 0) {
+        LOG(PROG_LOG, LOG_ERR, "could not create thread: %s\n",
+            strerror(rc));
         return;
       }
     break;
@@ -778,8 +782,12 @@ void _aq_programmer_(program_type r_type, char *args, aqkey *button, int value, 
       break;
     default:
       // Should check that _prog_functions[type] is valid.
-      if( pthread_create( &programmingthread->thread_id , NULL ,  _prog_functions[type], (void*)programmingthread) < 0) {
-        LOG(PROG_LOG, LOG_ERR, "could not create thread\n");
+      int rc = pthread_create(&programmingthread->thread_id, NULL,
+                              _prog_functions[type],
+                              (void *)programmingthread);
+      if (rc != 0) {
+        LOG(PROG_LOG, LOG_ERR, "could not create thread: %s\n",
+            strerror(rc));
         return;
       }
     break;

@@ -909,8 +909,8 @@ bool process_iaqtouch_packet(unsigned char *packet, int length, struct aqualinkd
     _currentPageLoading = packet[PKT_IAQT_PAGTYPE];
     _currentPage = NUL;
     memset(_pageButtons, 0, IAQ_PAGE_BUTTONS * sizeof(struct iaqt_page_button));
-    memset(_deviceStatus, 0, sizeof(char) * IAQ_STATUS_PAGE_LINES * AQ_MSGLEN+1 );
-    memset(_tableInformation, 0, sizeof(char) * IAQ_MSG_TABLE_LINES * AQ_MSGLEN+1 );
+    memset(_deviceStatus, 0, sizeof(_deviceStatus));
+    memset(_tableInformation, 0, sizeof(_tableInformation));
     //memset(_devicePageButtons, 0, IAQ_PAGE_BUTTONS * sizeof(struct iaqt_page_button));
     // Fix bug with control panel where after a few hours status page disapears and you need to hit menu.
     if (gotStatus == false)

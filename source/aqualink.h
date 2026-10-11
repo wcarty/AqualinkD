@@ -188,6 +188,8 @@ struct action {
   //char value[10];
 };
 
+#define ACTION_QUEUE_CAPACITY 16
+
 // Moved to aq_programmer to stop circular dependency
 /*
 typedef enum pump_type {
@@ -508,6 +510,10 @@ struct aqualinkdata
   int open_websockets;
   struct programmingthread active_thread;
   struct action unactioned;
+  pthread_mutex_t action_mutex;
+  bool action_in_progress;
+  struct action action_queue[ACTION_QUEUE_CAPACITY];
+  unsigned int action_queue_count;
   unsigned char raw_status[AQ_PSTLEN];
   // Multiple threads update this value.
   //volatile bool updated;

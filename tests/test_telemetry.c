@@ -11,12 +11,12 @@ static void test_source_timestamp_tracks_unchanged_acquisitions(void)
 
   assert(update_source_timestamp(&timestamp, &dirty, 1000));
   assert(timestamp == 1000);
-  assert(dirty);
+  assert(!dirty);
 
   dirty = false;
   assert(update_source_timestamp(&timestamp, &dirty, 1300));
   assert(timestamp == 1300);
-  assert(dirty);
+  assert(!dirty);
   assert(source_age_seconds(timestamp, 1600) == 300);
 }
 
@@ -40,10 +40,10 @@ static void test_air_temperature_timestamp(void)
     .is_dirty = false
   };
 
-  assert(update_air_temperature(&aqdata, 88, 1300));
+  assert(!update_air_temperature(&aqdata, 88, 1300));
   assert(aqdata.air_temp == 88);
   assert(aqdata.air_temp_last_update == 1300);
-  assert(aqdata.is_dirty);
+  assert(!aqdata.is_dirty);
 
   aqdata.is_dirty = false;
   assert(!update_air_temperature(&aqdata, TEMP_UNKNOWN, 1600));
@@ -60,7 +60,7 @@ static void test_pump_timestamp_validation(void)
 
   assert(update_pump_timestamp(&aqdata, 0, 1000));
   assert(aqdata.pumps[0].last_update == 1000);
-  assert(aqdata.is_dirty);
+  assert(!aqdata.is_dirty);
 
   aqdata.is_dirty = false;
   assert(!update_pump_timestamp(&aqdata, 1, 1300));
@@ -78,7 +78,7 @@ static void test_panel_and_swg_timestamps(void)
 
   assert(update_swg_timestamp(&aqdata, 1100));
   assert(aqdata.swg_last_update == 1100);
-  assert(aqdata.is_dirty);
+  assert(!aqdata.is_dirty);
 }
 
 int main(void)

@@ -6,8 +6,7 @@ bool update_chemistry_reading(struct aqualinkdata *aqdata, int orp, float ph,
   if (orp <= 0 || ph <= 0 || acquired_at <= 0)
     return false;
 
-  bool changed = aqdata->orp != orp || aqdata->ph != ph ||
-                 aqdata->chemistry_last_update != acquired_at;
+  bool changed = aqdata->orp != orp || aqdata->ph != ph;
 
   if (aqdata->orp != orp)
     aqdata->orp = orp;

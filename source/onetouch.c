@@ -518,6 +518,12 @@ bool get_chemlinkinfo_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
   {
     int orp = atoi(&_menu[menuLineIdx + 1][4]);
     char *indx = strchr(_menu[menuLineIdx + 1], '/');
+    if (indx == NULL || strlen(indx) < 4 ||
+        strncasecmp(indx + 1, "PH", 2) != 0) {
+      LOG(ONET_LOG, LOG_WARNING, "Did not understand Chemlink message '%s'\n",
+          _menu[menuLineIdx + 1]);
+      return false;
+    }
     float ph = atof(indx + 3);
     LOG(ONET_LOG, LOG_INFO, "Cemlink ORP = %d PH = %f\n", orp, ph);
     return update_chemistry_reading(aqdata, orp, ph, time(NULL));

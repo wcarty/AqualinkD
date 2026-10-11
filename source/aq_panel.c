@@ -1379,31 +1379,110 @@ int getWaterTemp(struct aqualinkdata *aqdata)
    Basic programming that are not too involved, ie no Jandy bugs to overcome or aq_programmer can make decision on protocol to use.
    Simply set them all as unactioned, and let the delayed_request code pick them up and pass to aq_programmer 
 */
+bool queue_action_request(struct aqualinkdata *aqdata,
+                          const struct action *request, bool coalesce)
+{
+  bool queued = true;
+  pthread_mutex_lock(&aqdata->action_mutex);
+
+  if (!aqdata->action_in_progress &&
+      aqdata->unactioned.type == NO_ACTION) {
+    aqdata->unactioned = *request;
+  } else if (coalesce && !aqdata->action_in_progress &&
+             aqdata->unactioned.type == request->type &&
+             aqdata->unactioned.id == request->id) {
+    aqdata->unactioned = *request;
+  } else if (coalesce && aqdata->action_queue_count > 0 &&
+             aqdata->action_queue[aqdata->action_queue_count - 1].type ==
+                 request->type &&
+             aqdata->action_queue[aqdata->action_queue_count - 1].id ==
+                 request->id) {
+    aqdata->action_queue[aqdata->action_queue_count - 1] = *request;
+  } else if (aqdata->action_queue_count < ACTION_QUEUE_CAPACITY) {
+    aqdata->action_queue[aqdata->action_queue_count++] = *request;
+  } else {
+    queued = false;
+  }
+
+  pthread_mutex_unlock(&aqdata->action_mutex);
+  if (!queued)
+    LOG(PANL_LOG, LOG_ERR, "Panel action queue is full; rejecting type %d\n",
+        request->type);
+  return queued;
+}
+
+bool begin_action_request(struct aqualinkdata *aqdata, time_t now)
+{
+  bool ready = false;
+  pthread_mutex_lock(&aqdata->action_mutex);
+  if (!aqdata->action_in_progress &&
+      aqdata->unactioned.type != NO_ACTION &&
+      difftime(now, aqdata->unactioned.requested) > 2) {
+    aqdata->action_in_progress = true;
+    ready = true;
+  }
+  pthread_mutex_unlock(&aqdata->action_mutex);
+  return ready;
+}
+
+void defer_action_request(struct aqualinkdata *aqdata)
+{
+  pthread_mutex_lock(&aqdata->action_mutex);
+  aqdata->action_in_progress = false;
+  pthread_mutex_unlock(&aqdata->action_mutex);
+}
+
+void complete_action_request(struct aqualinkdata *aqdata)
+{
+  pthread_mutex_lock(&aqdata->action_mutex);
+  if (aqdata->action_queue_count > 0) {
+    aqdata->unactioned = aqdata->action_queue[0];
+    aqdata->action_queue_count--;
+    if (aqdata->action_queue_count > 0) {
+      memmove(&aqdata->action_queue[0], &aqdata->action_queue[1],
+              aqdata->action_queue_count * sizeof(struct action));
+    }
+  } else {
+    aqdata->unactioned.type = NO_ACTION;
+    aqdata->unactioned.value = -1;
+    aqdata->unactioned.id = -1;
+    aqdata->unactioned.requested = 0;
+    aqdata->unactioned.button = NULL;
+  }
+  aqdata->action_in_progress = false;
+  pthread_mutex_unlock(&aqdata->action_mutex);
+}
+
 bool programDeviceValue(struct aqualinkdata *aqdata, action_type type, int value, int id, bool expectMultiple) // id is only valid for PUMP RPM
 {
-  if (aqdata->unactioned.type != NO_ACTION && type != aqdata->unactioned.type)
-    LOG(PANL_LOG,LOG_ERR, "about to overwrite unactioned panel program\n");
+  struct action request = {
+    .type = type,
+    .requested = 0,
+    .value = value,
+    .id = id,
+    .button = NULL
+  };
 
   if (type == POOL_HTR_SETPOINT || type == SPA_HTR_SETPOINT || type == FREEZE_SETPOINT || type == SWG_SETPOINT ) {
-    aqdata->unactioned.value = setpoint_check(type, value, aqdata);
-    if (value != aqdata->unactioned.value)
-      LOG(PANL_LOG,LOG_NOTICE, "requested setpoint value %d is invalid, change to %d\n", value, aqdata->unactioned.value);
+    request.value = setpoint_check(type, value, aqdata);
+    if (value != request.value)
+      LOG(PANL_LOG,LOG_NOTICE, "requested setpoint value %d is invalid, change to %d\n", value, request.value);
   } else if (type == CHILLER_SETPOINT) {
     if (isIAQT_ENABLED) {
-      aqdata->unactioned.value = setpoint_check(type, value, aqdata);
-      if (value != aqdata->unactioned.value)
-        LOG(PANL_LOG,LOG_NOTICE, "requested setpoint value %d is invalid, change to %d\n", value, aqdata->unactioned.value);
+      request.value = setpoint_check(type, value, aqdata);
+      if (value != request.value)
+        LOG(PANL_LOG,LOG_NOTICE, "requested setpoint value %d is invalid, change to %d\n", value, request.value);
     } else {
       LOG(PANL_LOG,LOG_ERR, "Chiller setpoint can only be set when `%s` is set to iAqualinkTouch procotol\n", CFG_N_extended_device_id);
       return false;
     }
   } else if (type == PUMP_RPM) {
-    aqdata->unactioned.value = value;
+    request.value = value;
   } else if (type == PUMP_VSPROGRAM) {
-    LOG(PANL_LOG,LOG_ERR, "requested Pump vsp program is not implimented yet\n", value, aqdata->unactioned.value);
+    LOG(PANL_LOG,LOG_ERR, "requested Pump vsp program is not implimented yet\n");
   } else {
     // SWG_BOOST & PUMP_RPM & SETPOINT incrment
-    aqdata->unactioned.value = value;
+    request.value = value;
   }
 
   if (type == PUMP_RPM || type == PUMP_VSPROGRAM) {
@@ -1412,23 +1491,17 @@ bool programDeviceValue(struct aqualinkdata *aqdata, action_type type, int value
         if (aqdata->pumps[i].pumpType == PT_UNKNOWN) {
           LOG(ONET_LOG,LOG_ERR, "Can't set Pump RPM/GPM until type is known\n");
         }
-        aqdata->unactioned.button = aqdata->pumps[i].button;
+        request.button = aqdata->pumps[i].button;
         break;
       }
     }
   }
 
-  aqdata->unactioned.type = type;
-  aqdata->unactioned.id = id; // This is only valid for pump.
-
-  
   // Should probably limit this to setpoint and no aq_serial protocol.
   if (expectMultiple) // We can get multiple MQTT requests from some, so this will wait for last one to come in.
-    time(&aqdata->unactioned.requested);
-  else
-    aqdata->unactioned.requested = 0;
+    time(&request.requested);
 
-  return true;
+  return queue_action_request(aqdata, &request, expectMultiple);
 }
 
 
@@ -1587,6 +1660,11 @@ void programDeviceLightBrightness(struct aqualinkdata *aqdata, int value, int de
   //int extra_value = false;
   
   clight_detail *light = getProgramableLight(aqdata, deviceIndex);
+  if (light == NULL) {
+    LOG(PANL_LOG,LOG_ERR, "Can not set light brightness on device '%s'\n",
+        aqdata->aqbuttons[deviceIndex].label);
+    return;
+  }
 
   if (value < 0 || value > 100) {
     LOG(PANL_LOG,LOG_ERR, "Dimmer value %d is not valid, using %d\n",value,AQ_CLAMP(value,0,100));
@@ -1601,14 +1679,18 @@ void programDeviceLightBrightness(struct aqualinkdata *aqdata, int value, int de
     
   if (expectMultiple) {
     // Queue up a request, this will call us back through with expectMultiple=false
-    time(&aqdata->unactioned.requested);
-    aqdata->unactioned.value = value;
-    aqdata->unactioned.type = LIGHT_BRIGHTNESS;
-    aqdata->unactioned.id = deviceIndex;
+    struct action request = {
+      .type = LIGHT_BRIGHTNESS,
+      .value = value,
+      .id = deviceIndex,
+      .button = NULL
+    };
+    time(&request.requested);
+    queue_action_request(aqdata, &request, true);
     return;
   }
 
-  if  (light == NULL || (light->lightType != LC_DIMMER2 && light->lightType != LC_DIMMER)) {
+  if (light->lightType != LC_DIMMER2 && light->lightType != LC_DIMMER) {
     LOG(PANL_LOG,LOG_ERR, "Can not set light brightness on device '%s'\n",aqdata->aqbuttons[deviceIndex].label);
     return;
   }
@@ -1670,11 +1752,15 @@ void programDeviceLightBrightness(struct aqualinkdata *aqdata, int value, int de
       aq_program(AQ_SET_ALLB_LIGHTDIMMER, &aqdata->aqbuttons[deviceIndex], calVal, false, aqdata);
       if (value != 25 && value !=50 && value !=75 && value != 100 && isRSSA_ENABLED) {
         // Setup the rssd to set the light to the right value. 
-        time(&aqdata->unactioned.requested);
-        aqdata->unactioned.requested += 5; // This should give enough time for the allbutton to finish
-        aqdata->unactioned.value = value;
-        aqdata->unactioned.type = LIGHT_BRIGHTNESS;
-        aqdata->unactioned.id = deviceIndex;
+        struct action request = {
+          .type = LIGHT_BRIGHTNESS,
+          .value = value,
+          .id = deviceIndex,
+          .button = NULL
+        };
+        time(&request.requested);
+        request.requested += 5; // This should give enough time for the allbutton to finish
+        queue_action_request(aqdata, &request, false);
       }
       
     }

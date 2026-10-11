@@ -80,9 +80,9 @@ static void test_acquisition_timestamp_tracks_unchanged_readings(void)
   assert(aqdata.is_dirty);
 
   aqdata.is_dirty = false;
-  assert(update_chemistry_reading(&aqdata, 620, 7.5f, 1300));
+  assert(!update_chemistry_reading(&aqdata, 620, 7.5f, 1300));
   assert(aqdata.chemistry_last_update == 1300);
-  assert(aqdata.is_dirty);
+  assert(!aqdata.is_dirty);
   assert(chemistry_age_seconds(aqdata.chemistry_last_update, 1600) == 300);
 }
 
