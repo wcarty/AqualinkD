@@ -60,6 +60,8 @@ These settings are external to this repository but are recorded here for operati
   `/var/backups/aqualinkd/20261011T150839Z-fd967da-manager-console`
 * Management console navigation rollback:
   `/var/backups/aqualinkd/20261011T151117Z-b041604-manager-navigation`
+* Management console control fix rollback:
+  `/var/backups/aqualinkd/20261011T151525Z-1ed347a-manager-controls`
 
 ---
 
