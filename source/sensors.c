@@ -50,27 +50,59 @@ void *sensors_worker( void *ptr );
 void stop_sensors_thread() {
   LOG(AQUA_LOG, LOG_INFO, "Stopping sensor thread\n");
 
-  if (_sthread != NULL)
+  if (_sthread != NULL) {
+    pthread_mutex_lock(&_sthread->thread_mutex);
     pthread_cond_broadcast(&_sthread->thread_cond);
-
+    pthread_mutex_unlock(&_sthread->thread_mutex);
+    pthread_join(_sthread->thread_id, NULL);
+    pthread_cond_destroy(&_sthread->thread_cond);
+    pthread_mutex_destroy(&_sthread->thread_mutex);
+    free(_sthread);
+    _sthread = NULL;
+  }
 }
 
 void start_sensors_thread(struct aqualinkdata *aqdata) {
 
   _sthread = calloc(1, sizeof(struct sensorthread));
+  if (_sthread == NULL) {
+    LOG(AQUA_LOG, LOG_ERR, "could not allocate sensors thread state\n");
+    return;
+  }
 
   _sthread->aqdata = aqdata;
   _sthread->thread_id = 0;
 
-  if( pthread_create( &_sthread->thread_id , NULL ,  sensors_worker, (void*)_sthread) < 0) {
-    LOG(AQUA_LOG, LOG_ERR, "could not create sensors thread\n");
+  int rc = pthread_mutex_init(&_sthread->thread_mutex, NULL);
+  if (rc != 0) {
+    LOG(AQUA_LOG, LOG_ERR, "could not initialize sensors mutex: %s\n",
+        strerror(rc));
     free(_sthread);
+    _sthread = NULL;
+    return;
+  }
+  rc = pthread_cond_init(&_sthread->thread_cond, NULL);
+  if (rc != 0) {
+    LOG(AQUA_LOG, LOG_ERR, "could not initialize sensors condition: %s\n",
+        strerror(rc));
+    pthread_mutex_destroy(&_sthread->thread_mutex);
+    free(_sthread);
+    _sthread = NULL;
     return;
   }
 
-  if ( _sthread->thread_id != 0 ) {
-    pthread_detach(_sthread->thread_id);
+  rc = pthread_create(&_sthread->thread_id, NULL, sensors_worker,
+                      (void *)_sthread);
+  if (rc != 0) {
+    LOG(AQUA_LOG, LOG_ERR, "could not create sensors thread: %s\n",
+        strerror(rc));
+    pthread_cond_destroy(&_sthread->thread_cond);
+    pthread_mutex_destroy(&_sthread->thread_mutex);
+    free(_sthread);
+    _sthread = NULL;
+    return;
   }
+
 }
 
 void *sensors_worker( void *ptr )
@@ -106,8 +138,7 @@ void *sensors_worker( void *ptr )
 
   LOG(AQUA_LOG, LOG_DEBUG, "End sensor thread\n");
 
-  free(sthread);
-  pthread_exit(0);
+  return NULL;
 }
 
 #define READ_BUFFER_SIZE 256
@@ -127,11 +158,13 @@ bool read_sensor(external_sensor *sensor) {
   }
 
   // Read the sensor
-  if ( read(fp, buffer, READ_BUFFER_SIZE) <= 0 ) {
+  ssize_t bytes_read = read(fp, buffer, sizeof(buffer) - 1);
+  if (bytes_read <= 0) {
     LOG(AQUA_LOG,LOG_ERR, "Reading value from sensor %s %s\n",sensor->label, sensor->path);
     close(fp);
     return FALSE;
   }
+  buffer[bytes_read] = '\0';
   close(fp);
 
   // If regex pass that
@@ -162,8 +195,9 @@ bool read_sensor(external_sensor *sensor) {
 
   // Convert value to float
   value = strtof(startptr, &endptr);
-  if (endptr == buffer) {
+  if (endptr == startptr) {
     LOG(AQUA_LOG,LOG_ERR, "Reading sensor value from %s\n", sensor->path);
+    return FALSE;
   }
 
   value = value * sensor->factor;
@@ -237,4 +271,3 @@ bool read_sensor_buffered(external_sensor *sensor) {
   return FALSE;
 }
 #endif
-

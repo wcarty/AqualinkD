@@ -4,8 +4,10 @@
 
 
 #define AIR_TEMP_TOPIC "Temperature/Air"
+#define AIR_TEMP_LAST_UPDATE_TOPIC AIR_TEMP_TOPIC "/last_update"
 #define POOL_TEMP_TOPIC "Temperature/Pool"
 #define SPA_TEMP_TOPIC "Temperature/Spa"
+#define PANEL_LAST_UPDATE_TOPIC "Panel/last_update"
 //#define POOL_SETPT_TOPIC "Pool_Heater/setpoint"
 //#define SPA_SETPT_TOPIC "Spa_Heater/setpoint"
 
@@ -26,12 +28,14 @@
 #define SWG_BOOST_DURATION_TOPIC SWG_BOOST_TOPIC "/duration"
 
 #define SWG_STATUS_MSG_TOPIC SWG_TOPIC "/Display_Message"
+#define SWG_LAST_UPDATE_TOPIC SWG_TOPIC "/last_update"
 
 #define CHEM_TOPIC "CHEM"
 #define CHEM_PH_TOPIC CHEM_TOPIC "/pH"
 #define CHRM_PH_F_TOPIC CHEM_TOPIC "/pH_f"
 #define CHEM_ORP_TOPIC CHEM_TOPIC "/ORP"
 #define CHRM_ORP_F_TOPIC CHEM_TOPIC "/ORP_f"
+#define CHEM_LAST_UPDATE_TOPIC CHEM_TOPIC "/last_update"
 
 #define LXI_TOPIC "LXi"
 #define LXI_STATUS LXI_TOPIC "/Status"
@@ -58,6 +62,7 @@
 #define PUMP_PPC_TOPIC "/PPC"
 #define PUMP_SPEED_TOPIC "/Speed"
 #define PUMP_EFFICIENCY_TOPIC "/Efficiency"
+#define PUMP_LAST_UPDATE_TOPIC "/last_update"
 
 #define LIGHT_PROGRAM_TOPIC "/program"
 #define LIGHT_DIMMER_VALUE_TOPIC "/brightness"

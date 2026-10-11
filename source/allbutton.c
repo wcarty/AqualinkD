@@ -10,6 +10,7 @@
 #include "allbutton_aq_programmer.h"
 #include "color_lights.h"
 #include "aq_scheduler.h"
+#include "telemetry.h"
 
 #include "iaqtouch.h"
 
@@ -400,7 +401,7 @@ void _processMessage(char *message, struct aqualinkdata *aqdata, bool reset)
   }
   else if (strncasecmp(msg, MSG_AIR_TEMP, MSG_AIR_TEMP_LEN) == 0)
   {
-    SET_IF_CHANGED(aqdata->air_temp, atoi(msg + MSG_AIR_TEMP_LEN), aqdata->is_dirty);
+    update_air_temperature(aqdata, atoi(msg + MSG_AIR_TEMP_LEN), time(NULL));
 
     if (aqdata->temp_units == UNKNOWN)
       setUnits(msg, aqdata);
@@ -535,6 +536,7 @@ void _processMessage(char *message, struct aqualinkdata *aqdata, bool reset)
       setSWGdeviceStatus(aqdata, ALLBUTTON, SWG_STATUS_ON);
     }
     SET_IF_CHANGED( aqdata->swg_ppm, atoi(msg + MSG_SWG_PPM_LEN), aqdata->is_dirty);
+    update_swg_timestamp(aqdata, time(NULL));
     msg_loop |= MSG_SWG;
   }
   else if ((msg[1] == ':' || msg[2] == ':') && msg[strlen(msg) - 1] == 'M')

@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -33,9 +34,11 @@
 #include "aq_timer.h"
 #include "aq_programmer.h"
 #include "rs_msg_utils.h"
+#include "telemetry.h"
 #include "color_lights.h"
 #include "iaqualink.h"
 #include "aq_panel.h"
+#include "chemistry.h"
 
 //#define test_message "{\"type\": \"status\",\"version\": \"8157 REV MMM\",\"date\": \"09/01/16 THU\",\"time\": \"1:16 PM\",\"temp_units\": \"F\",\"air_temp\": \"96\",\"pool_temp\": \"86\",\"spa_temp\": \" \",\"battery\": \"ok\",\"pool_htr_set_pnt\": \"85\",\"spa_htr_set_pnt\": \"99\",\"freeze_protection\": \"off\",\"frz_protect_set_pnt\": \"0\",\"leds\": {\"pump\": \"on\",\"spa\": \"off\",\"aux1\": \"off\",\"aux2\": \"off\",\"aux3\": \"off\",\"aux4\": \"off\",\"aux5\": \"off\",\"aux6\": \"off\",\"aux7\": \"off\",\"pool_heater\": \"off\",\"spa_heater\": \"off\",\"solar_heater\": \"off\"}}"
 //#define test_labels "{\"type\": \"aux_labels\",\"aux1_label\": \"Cleaner\",\"aux2_label\": \"Waterfall\",\"aux3_label\": \"Spa Blower\",\"aux4_label\": \"Pool Light\",\"aux5_label\": \"Spa Light\",\"aux6_label\": \"Unassigned\",\"aux7_label\": \"Unassigned\"}"
@@ -736,15 +739,58 @@ int build_aqualink_aqmanager_JSON(struct aqualinkdata *aqdata, char* buffer, int
   return length;
 }
 
+static int bounded_status_sprintf(char *buffer, int size, char *destination,
+                                  bool *overflow, const char *format, ...)
+{
+  if (buffer == NULL || destination == NULL || overflow == NULL || size <= 0) {
+    if (overflow != NULL)
+      *overflow = true;
+    return 0;
+  }
+
+  ptrdiff_t used = destination - buffer;
+  if (used < 0 || used >= size) {
+    *overflow = true;
+    return 0;
+  }
+
+  va_list args;
+  va_start(args, format);
+  int available = size - (int)used;
+  int written = vsnprintf(destination, available, format, args);
+  va_end(args);
+
+  if (written < 0) {
+    *overflow = true;
+    return 0;
+  }
+  if (written >= available) {
+    *overflow = true;
+    return available - 1;
+  }
+  return written;
+}
+
 int build_aqualink_status_JSON(struct aqualinkdata *aqdata, char* buffer, int size)
 {
   //strncpy(buffer, test_message, strlen(test_message)+1);
   //return strlen(test_message);
   //char buffer2[600];
   
+  if (aqdata == NULL || buffer == NULL || size <= 0)
+    return 0;
+  if (size < 128) {
+    int written = snprintf(buffer, size, "{\"type\":\"status\","
+                           "\"status\":\"error\"}");
+    return written < size ? written : size - 1;
+  }
   memset(&buffer[0], 0, size);
   int length = 0;
   int i;
+  bool overflow = false;
+
+#define sprintf(destination, ...) \
+  bounded_status_sprintf(buffer, size, destination, &overflow, __VA_ARGS__)
 
   length += sprintf(buffer+length, "{\"type\": \"status\"");
   length += sprintf(buffer+length, ",\"status\":\"%s\"",getStatus(aqdata) );
@@ -775,10 +821,23 @@ int build_aqualink_status_JSON(struct aqualinkdata *aqdata, char* buffer, int si
       length += sprintf(buffer+length, ",\"chiller_mode\":\"%s\"",((altlabel_detail *)aqdata->chiller_button->special_mask_ptr)->in_alt_mode?"cool":"heat");
   }
   
+  if (aqdata->panel_last_update > 0) {
+    length += sprintf(buffer+length, ",\"panel_last_update\":%lld",
+                      (long long)aqdata->panel_last_update);
+    length += sprintf(buffer+length, ",\"panel_age_seconds\":%lld",
+                      source_age_seconds(aqdata->panel_last_update, time(NULL)));
+  }
+
   if ( aqdata->air_temp == TEMP_UNKNOWN )
     length += sprintf(buffer+length, ",\"air_temp\":\" \"");
   else
     length += sprintf(buffer+length, ",\"air_temp\":\"%d\"",aqdata->air_temp );
+  if (aqdata->air_temp_last_update > 0) {
+    length += sprintf(buffer+length, ",\"air_temp_last_update\":%lld",
+                      (long long)aqdata->air_temp_last_update);
+    length += sprintf(buffer+length, ",\"air_temp_age_seconds\":%lld",
+                      source_age_seconds(aqdata->air_temp_last_update, time(NULL)));
+  }
   
   if ( aqdata->pool_temp == TEMP_UNKNOWN )
     length += sprintf(buffer+length, ",\"pool_temp\":\" \"");
@@ -818,6 +877,19 @@ int build_aqualink_status_JSON(struct aqualinkdata *aqdata, char* buffer, int si
     
   if ( aqdata->orp != TEMP_UNKNOWN )
     length += sprintf(buffer+length, ",\"chem_orp\":\"%d\"",aqdata->orp );
+
+  if (aqdata->chemistry_last_update > 0) {
+    length += sprintf(buffer+length, ",\"chem_last_update\":%lld",
+                      (long long)aqdata->chemistry_last_update);
+    length += sprintf(buffer+length, ",\"chem_age_seconds\":%lld",
+                      chemistry_age_seconds(aqdata->chemistry_last_update, time(NULL)));
+  }
+  if (aqdata->swg_last_update > 0) {
+    length += sprintf(buffer+length, ",\"swg_last_update\":%lld",
+                      (long long)aqdata->swg_last_update);
+    length += sprintf(buffer+length, ",\"swg_age_seconds\":%lld",
+                      source_age_seconds(aqdata->swg_last_update, time(NULL)));
+  }
 
   //if ( READ_RSDEV_SWG )
     length += sprintf(buffer+length, ",\"swg_fullstatus\": \"%d\"", aqdata->ar_swg_device_status);
@@ -863,10 +935,17 @@ printf("Pump Type %d\n",aqdata->pumps[i].pumpType);
     */
     //if (aqdata->pumps[i].pumpType != PT_UNKNOWN && (aqdata->pumps[i].rpm != TEMP_UNKNOWN || aqdata->pumps[i].gpm != TEMP_UNKNOWN || aqdata->pumps[i].watts != TEMP_UNKNOWN)) {
     if (aqdata->pumps[i].pumpType != PT_UNKNOWN) {
-      length += sprintf(buffer+length, "\"Pump_%d\":{\"name\":\"%s\",\"id\":\"%s\",\"RPM\":\"%d\",\"GPM\":\"%d\",\"Watts\":\"%d\",\"Pump_Type\":\"%s\",\"Status\":\"%d\"},",
+      length += sprintf(buffer+length, "\"Pump_%d\":{\"name\":\"%s\",\"id\":\"%s\",\"RPM\":\"%d\",\"GPM\":\"%d\",\"Watts\":\"%d\",\"Pump_Type\":\"%s\",\"Status\":\"%d\"",
                         i+1,aqdata->pumps[i].button->label,aqdata->pumps[i].button->name,aqdata->pumps[i].rpm,aqdata->pumps[i].gpm,aqdata->pumps[i].watts,
                         (aqdata->pumps[i].pumpType==VFPUMP?"vfPump":(aqdata->pumps[i].pumpType==VSPUMP?"vsPump":"ePump")),
                         getPumpStatus(i, aqdata));
+      if (aqdata->pumps[i].last_update > 0) {
+        length += sprintf(buffer+length, ",\"last_update\":%lld,\"age_seconds\":%lld",
+                          (long long)aqdata->pumps[i].last_update,
+                          source_age_seconds(aqdata->pumps[i].last_update,
+                                             time(NULL)));
+      }
+      length += sprintf(buffer+length, "},");
     }
   }
   if (buffer[length-1] == ',')
@@ -960,8 +1039,19 @@ printf("Pump Type %d\n",aqdata->pumps[i].pumpType);
   length += sprintf(buffer+length, "}" );
   
   buffer[length] = '\0';
-  
-  return strlen(buffer);
+
+#undef sprintf
+
+  if (overflow) {
+    LOG(NET_LOG, LOG_ERR,
+        "Status JSON exceeded the %d-byte output buffer\n", size);
+    int written = snprintf(buffer, size,
+                           "{\"type\":\"status\",\"status\":\"error\","
+                           "\"message\":\"status response too large\"}");
+    return written < size ? written : size - 1;
+  }
+
+  return length;
 }
 
 int build_aux_labels_JSON(struct aqualinkdata *aqdata, char* buffer, int size)

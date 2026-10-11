@@ -5,6 +5,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <time.h>
 #include "aq_serial.h"
 #include "aq_programmer.h"
 #include "sensors.h"
@@ -188,6 +189,8 @@ struct action {
   //char value[10];
 };
 
+#define ACTION_QUEUE_CAPACITY 16
+
 // Moved to aq_programmer to stop circular dependency
 /*
 typedef enum pump_type {
@@ -270,6 +273,7 @@ typedef struct pumpd
   int rpm;
   int gpm;
   int watts;
+  time_t last_update;
   int maxSpeed; // Max rpm or gpm depending on pump
   int minSpeed;
   unsigned char pumpID;
@@ -469,7 +473,9 @@ struct aqualinkdata
   aqkey aqbuttons[TOTAL_BUTTONS];
   unsigned short total_buttons;
   unsigned short virtual_button_start;
+  time_t panel_last_update;
   int air_temp;
+  time_t air_temp_last_update;
   int pool_temp;
   int spa_temp;
   int temp_units;
@@ -480,6 +486,7 @@ struct aqualinkdata
   int spa_htr_set_point;
   int swg_percent;
   int swg_ppm;
+  time_t swg_last_update;
   int chiller_set_point;
   aqkey *chiller_button;
   //heatmump_mode chiller_mode;
@@ -499,6 +506,7 @@ struct aqualinkdata
   int boost_linked_device;
   float ph;
   int orp;
+  time_t chemistry_last_update;
 
   // Below this line is not state related.
   //aqkey *orderedbuttons[TOTAL_BUTTONS]; // Future to reduce RS4,6,8,12,16 & spa buttons
@@ -519,6 +527,10 @@ struct aqualinkdata
   int open_websockets;
   struct programmingthread active_thread;
   struct action unactioned;
+  pthread_mutex_t action_mutex;
+  bool action_in_progress;
+  struct action action_queue[ACTION_QUEUE_CAPACITY];
+  unsigned int action_queue_count;
   unsigned char raw_status[AQ_PSTLEN];
   // Multiple threads update this value.
   //volatile bool updated;

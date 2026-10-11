@@ -269,6 +269,18 @@ const char *HASSIO_SENSOR_DISCOVER = "{"
     "\"icon\": \"%s\""
 "}";
 
+const char *HASSIO_TIMESTAMP_SENSOR_DISCOVER = "{"
+    "\"device\": {" HASS_DEVICE "},"
+    "\"availability\": {" HASS_AVAILABILITY "},"
+    "\"type\": \"sensor\","
+    "\"unique_id\": \"aqualinkd_%s\","
+    "\"name\": \"%s\","
+    "\"state_topic\": \"%s/%s\","
+    "\"value_template\": \"{{ as_datetime(value | int) }}\","
+    "\"device_class\": \"timestamp\","
+    "\"icon\": \"%s\""
+"}";
+
 const char *HASSIO_SERVICE_MODE_ENUM_SENSOR_DISCOVER = "{"
     "\"device\": {" HASS_DEVICE "},"
     "\"availability\": {" HASS_AVAILABILITY "},"
@@ -427,6 +439,8 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
   char msg[JSON_STATUS_SIZE];
   char topic[250];
   char idbuf[128];
+  char namebuf[128];
+  char state_topic[128];
   char connections[128];
 
   const net_iface *iface = get_first_valid_interface();
@@ -644,6 +658,15 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
   }
 
   // Temperatures
+  rsm_char_replace(idbuf, PANEL_LAST_UPDATE_TOPIC, "/", "_");
+  sprintf(msg, HASSIO_TIMESTAMP_SENSOR_DISCOVER, connections,
+          _aqconfig_.mqtt_aq_topic, idbuf, "Panel Last Acquisition",
+          _aqconfig_.mqtt_aq_topic, PANEL_LAST_UPDATE_TOPIC,
+          "mdi:clock-check-outline");
+  sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config",
+          _aqconfig_.mqtt_discovery_topic, idbuf);
+  send_mqtt(nc, topic, msg);
+
   sprintf(msg, HASSIO_TEMP_SENSOR_DISCOVER,connections,_aqconfig_.mqtt_aq_topic,"Pool","Pool Temperature",_aqconfig_.mqtt_aq_topic,POOL_TEMP_TOPIC,(_aqconfig_.convert_mqtt_temp?"°C":"°F"),"mdi:water-thermometer");
   sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config", _aqconfig_.mqtt_discovery_topic, "Pool");
   send_mqtt(nc, topic, msg);
@@ -654,6 +677,24 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
 
   sprintf(msg, HASSIO_TEMP_SENSOR_DISCOVER,connections,_aqconfig_.mqtt_aq_topic,"Air","Air Temperature",_aqconfig_.mqtt_aq_topic,AIR_TEMP_TOPIC,(_aqconfig_.convert_mqtt_temp?"°C":"°F"),"mdi:thermometer");
   sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config", _aqconfig_.mqtt_discovery_topic, "Air");
+  send_mqtt(nc, topic, msg);
+
+  rsm_char_replace(idbuf, AIR_TEMP_LAST_UPDATE_TOPIC, "/", "_");
+  sprintf(msg, HASSIO_TIMESTAMP_SENSOR_DISCOVER, connections,
+          _aqconfig_.mqtt_aq_topic, idbuf, "Air Temperature Last Acquisition",
+          _aqconfig_.mqtt_aq_topic, AIR_TEMP_LAST_UPDATE_TOPIC,
+          "mdi:clock-check-outline");
+  sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config",
+          _aqconfig_.mqtt_discovery_topic, idbuf);
+  send_mqtt(nc, topic, msg);
+
+  rsm_char_replace(idbuf, SWG_LAST_UPDATE_TOPIC, "/", "_");
+  sprintf(msg, HASSIO_TIMESTAMP_SENSOR_DISCOVER, connections,
+          _aqconfig_.mqtt_aq_topic, idbuf, "SWG Last Acquisition",
+          _aqconfig_.mqtt_aq_topic, SWG_LAST_UPDATE_TOPIC,
+          "mdi:clock-check-outline");
+  sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config",
+          _aqconfig_.mqtt_discovery_topic, idbuf);
   send_mqtt(nc, topic, msg);
   
   // VSP Pumps
@@ -771,6 +812,19 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
       sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s%d_%s/config", _aqconfig_.mqtt_discovery_topic, "Pump",pn,"Efficiency");
       send_mqtt(nc, topic, msg);
     }
+
+    snprintf(idbuf, sizeof(idbuf), "Pump%d_Last_Update", pn);
+    snprintf(namebuf, sizeof(namebuf), "%s Last Acquisition",
+             aqdata->pumps[i].button->label);
+    snprintf(state_topic, sizeof(state_topic), "%s%s",
+             aqdata->pumps[i].button->name, PUMP_LAST_UPDATE_TOPIC);
+    sprintf(msg, HASSIO_TIMESTAMP_SENSOR_DISCOVER, connections,
+            _aqconfig_.mqtt_aq_topic, idbuf, namebuf,
+            _aqconfig_.mqtt_aq_topic, state_topic,
+            "mdi:clock-check-outline");
+    sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config",
+            _aqconfig_.mqtt_discovery_topic, idbuf);
+    send_mqtt(nc, topic, msg);
   }
 
   // Chem feeder (ph/orp)
@@ -787,6 +841,15 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
     sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config", _aqconfig_.mqtt_discovery_topic, idbuf);
     send_mqtt(nc, topic, msg);
   }
+
+  rsm_char_replace(idbuf, CHEM_LAST_UPDATE_TOPIC, "/", "_");
+  sprintf(msg, HASSIO_TIMESTAMP_SENSOR_DISCOVER, connections,
+          _aqconfig_.mqtt_aq_topic, idbuf, "Chemistry Last Acquisition",
+          _aqconfig_.mqtt_aq_topic, CHEM_LAST_UPDATE_TOPIC,
+          "mdi:clock-check-outline");
+  sprintf(topic, "%s/sensor/aqualinkd/aqualinkd_%s/config",
+          _aqconfig_.mqtt_discovery_topic, idbuf);
+  send_mqtt(nc, topic, msg);
 
   // Misc stuff
   sprintf(msg, HASSIO_SERVICE_MODE_ENUM_SENSOR_DISCOVER,connections,_aqconfig_.mqtt_aq_topic,SERVICE_MODE_TOPIC,"Service Mode",_aqconfig_.mqtt_aq_topic,SERVICE_MODE_TOPIC, "mdi:account-wrench");
@@ -833,4 +896,3 @@ void publish_mqtt_discovery(struct aqualinkdata *aqdata, struct mg_connection *n
   }
    
 }
-

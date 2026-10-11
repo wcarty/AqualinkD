@@ -32,6 +32,8 @@
 #include "config.h"
 #include "rs_msg_utils.h"
 #include "devices_jandy.h"
+#include "chemistry.h"
+#include "telemetry.h"
 //#include "pda_menu.h"
 
 
@@ -516,15 +518,15 @@ bool get_chemlinkinfo_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
   {
     int orp = atoi(&_menu[menuLineIdx + 1][4]);
     char *indx = strchr(_menu[menuLineIdx + 1], '/');
+    if (indx == NULL || strlen(indx) < 4 ||
+        strncasecmp(indx + 1, "PH", 2) != 0) {
+      LOG(ONET_LOG, LOG_WARNING, "Did not understand Chemlink message '%s'\n",
+          _menu[menuLineIdx + 1]);
+      return false;
+    }
     float ph = atof(indx + 3);
     LOG(ONET_LOG, LOG_INFO, "Cemlink ORP = %d PH = %f\n", orp, ph);
-    if (aqdata->ph != ph || aqdata->orp != orp)
-    {
-      SET_IF_CHANGED(aqdata->ph, ph, aqdata->is_dirty);
-      SET_IF_CHANGED(aqdata->orp, orp, aqdata->is_dirty);
-      return true;
-    }
-    return false;
+    return update_chemistry_reading(aqdata, orp, ph, time(NULL));
   }
   LOG(ONET_LOG, LOG_INFO, "Did not understand Chemlink message '%s'\n",_menu[menuLineIdx + 1]);
   return false;
@@ -541,12 +543,11 @@ bool get_chemsensors_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
     int orp = rsm_atoi(oi+4);
     float ph = rsm_atof(pi+3);
     if (orp > 0 && ph > 0) {
-      if (aqdata->ph != ph || aqdata->orp != orp) {
-        SET_IF_CHANGED(aqdata->ph, ph, aqdata->is_dirty);
-        SET_IF_CHANGED(aqdata->orp, orp, aqdata->is_dirty);
+      bool changed = update_chemistry_reading(aqdata, orp, ph, time(NULL));
+      if (changed) {
         LOG(ONET_LOG,LOG_INFO, "Set Cem ORP = %d PH = %f from message '%s'\n",orp,ph,_menu[menuLineIdx]);
-        return true;
       }
+      return changed;
     } else {
           // Didn't understand message, not
       LOG(ONET_LOG,LOG_DEBUG, "Could not extract ORP & PH from message '%s'\n",_menu[menuLineIdx]);
@@ -581,6 +582,7 @@ bool get_aquapureinfo_from_menu(struct aqualinkdata *aqdata, int menuLineIdx)
       aqdata->swg_ppm = ppm;
       rtn = true;
     }
+    update_swg_timestamp(aqdata, time(NULL));
     LOG(ONET_LOG, LOG_INFO, "Aquapure SWG %d%, %d PPM\n", swgp, ppm);
   }
 
@@ -751,6 +753,7 @@ void pump_update(struct aqualinkdata *aqdata, int updated) {
     updates = '\0';
   } else if (updated >=0 && updated < MAX_PUMPS) {
      updates |= bitmask[updated];
+     update_pump_timestamp(aqdata, updated, time(NULL));
   }
 }
 

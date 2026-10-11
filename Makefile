@@ -78,8 +78,8 @@ endif
 
 
 # Main source files
-SRCS = aqualinkd.c utils.c config.c aq_serial.c aq_panel.c aq_programmer.c allbutton.c allbutton_aq_programmer.c net_services.c net_interface.c json_messages.c rs_msg_utils.c\
-       onetouch.c onetouch_aq_programmer.c iaqtouch.c iaqtouch_aq_programmer.c iaqualink.c\
+SRCS = aqualinkd.c utils.c config.c aq_serial.c aq_panel.c aq_programmer.c allbutton.c allbutton_aq_programmer.c chemistry.c telemetry.c net_services.c net_interface.c json_messages.c rs_msg_utils.c\
+       onetouch.c onetouch_aq_programmer.c iaqtouch.c iaqtouch_chemistry.c iaqtouch_aq_programmer.c iaqualink.c\
        devices_jandy.c packetLogger.c devices_pentair.c color_lights.c serialadapter.c aq_timer.c aq_scheduler.c web_config.c\
        rs485mon.c mongoose.c mqtt_discovery.c simulator.c sensors.c aq_systemutils.c timespec_subtract.c auto_configure.c
 
@@ -196,7 +196,7 @@ RSMON_AMD64 = ./release/rs485mon-amd64
 
 
 # Rules with no targets
-.PHONY: clean clean-buildfiles buildrelease release install
+.PHONY: clean clean-buildfiles buildrelease release install test
 
 # Default target
 .DEFAULT_GOAL := all
@@ -246,6 +246,23 @@ debugbuild: armhf arm64
 all:    $(MAIN) $(RSMON)
 	$(info $(MAIN) has been compiled)
 	$(info $(RSMON) has been compiled)
+
+TEST_BIN_DIR := $(OBJ_DIR)/tests
+TEST_TELEMETRY := $(TEST_BIN_DIR)/test_telemetry
+TEST_IAQ_CHEMISTRY := $(TEST_BIN_DIR)/test_iaqtouch_chemistry
+
+$(TEST_BIN_DIR):
+	$(MKDIR) $@
+
+$(TEST_TELEMETRY): tests/test_telemetry.c source/telemetry.c | $(TEST_BIN_DIR)
+	$(CC) $(GCCFLAGS) $(INCLUDES) -o $@ $^
+
+$(TEST_IAQ_CHEMISTRY): tests/test_iaqtouch_chemistry.c source/iaqtouch_chemistry.c source/chemistry.c | $(TEST_BIN_DIR)
+	$(CC) $(GCCFLAGS) $(INCLUDES) -o $@ $^
+
+test: $(TEST_TELEMETRY) $(TEST_IAQ_CHEMISTRY)
+	$(TEST_TELEMETRY)
+	$(TEST_IAQ_CHEMISTRY)
 
 slog:	$(RSMON)
 	$(info $(RSMON) has been compiled)

@@ -72,6 +72,11 @@ const char* getPanelString();
 const char* getShortPanelString();
 
 bool panel_device_request(struct aqualinkdata *aqdata, action_type type, int deviceIndex, int value, request_source source);
+bool queue_action_request(struct aqualinkdata *aqdata,
+                          const struct action *request, bool coalesce);
+bool begin_action_request(struct aqualinkdata *aqdata, time_t now);
+void defer_action_request(struct aqualinkdata *aqdata);
+void complete_action_request(struct aqualinkdata *aqdata);
 
 void updateLightProgram(struct aqualinkdata *aqdata, int value, clight_detail *light);
 void updateButtonLightProgram(struct aqualinkdata *aqdata, int value, int button);

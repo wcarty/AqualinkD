@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <syslog.h>
+#include <time.h>
 
 #ifdef AQ_MANAGER
 #include <systemd/sd-journal.h>
@@ -94,6 +95,16 @@ static int _mqtt_exit_flag = false;
 void start_mqtt(struct mg_mgr *mgr);
 static struct aqualinkdata _last_mqtt_aqualinkdata;
 static aqled _last_mqtt_chiller_led;
+struct source_publish_times {
+  time_t panel;
+  time_t air_temp;
+  time_t chemistry;
+  time_t swg;
+  time_t pumps[MAX_PUMPS];
+};
+static struct source_publish_times _source_publish_times;
+static struct source_publish_times _last_source_broadcast;
+static struct source_publish_times _source_broadcast_times;
 void mqtt_broadcast_aqualinkstate(struct mg_connection *nc);
 
 
@@ -634,31 +645,80 @@ void send_mqtt_string_msg(struct mg_connection *nc, const char *dev_name, const 
   send_mqtt(nc, mqtt_pub_topic, msg);
 }
 
-#define MQTT_TIMED_UDATE 300 //(in seconds)
+static void send_mqtt_timestamp_msg(struct mg_connection *nc,
+                                    const char *topic, time_t timestamp)
+{
+  char value[32];
+  snprintf(value, sizeof(value), "%lld", (long long)timestamp);
+  send_mqtt_string_msg(nc, topic, value);
+}
+
+#define MQTT_TIMED_UPDATE 300
+#define MQTT_SOURCE_TIMESTAMP_UPDATE 30
+
+static bool source_timestamp_publish_due(time_t current, time_t published,
+                                         time_t last_published_at, time_t now)
+{
+  return current > 0 && current != published &&
+         (published <= 0 || current < published || last_published_at <= 0 ||
+          now - last_published_at >= MQTT_SOURCE_TIMESTAMP_UPDATE);
+}
+
+static bool source_timestamp_update_due(struct aqualinkdata *aqdata)
+{
+  time_t now = time(NULL);
+  if (source_timestamp_publish_due(
+          aqdata->panel_last_update,
+          _last_source_broadcast.panel,
+          _source_broadcast_times.panel, now) ||
+      source_timestamp_publish_due(
+          aqdata->air_temp_last_update,
+          _last_source_broadcast.air_temp,
+          _source_broadcast_times.air_temp, now) ||
+      source_timestamp_publish_due(
+          aqdata->chemistry_last_update,
+          _last_source_broadcast.chemistry,
+          _source_broadcast_times.chemistry, now) ||
+      source_timestamp_publish_due(
+          aqdata->swg_last_update,
+          _last_source_broadcast.swg,
+          _source_broadcast_times.swg, now))
+    return true;
+
+  for (int i = 0; i < aqdata->num_pumps; i++) {
+    if (source_timestamp_publish_due(
+            aqdata->pumps[i].last_update,
+            _last_source_broadcast.pumps[i],
+            _source_broadcast_times.pumps[i], now))
+      return true;
+  }
+  return false;
+}
+
+static void mark_source_timestamps_broadcast(struct aqualinkdata *aqdata)
+{
+  time_t now = time(NULL);
+  _last_source_broadcast.panel = aqdata->panel_last_update;
+  _source_broadcast_times.panel = now;
+  _last_source_broadcast.air_temp = aqdata->air_temp_last_update;
+  _source_broadcast_times.air_temp = now;
+  _last_source_broadcast.chemistry = aqdata->chemistry_last_update;
+  _source_broadcast_times.chemistry = now;
+  _last_source_broadcast.swg = aqdata->swg_last_update;
+  _source_broadcast_times.swg = now;
+  for (int i = 0; i < aqdata->num_pumps; i++) {
+    _last_source_broadcast.pumps[i] = aqdata->pumps[i].last_update;
+    _source_broadcast_times.pumps[i] = now;
+  }
+}
 
 void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
 {
+  time_t now = time(NULL);
   int i;
   const char *status;
   int pumpStatus;
-  static struct timespec last_update_timestamp = {0, 0};
-
-
-  // We get called about every second, so check time every MQTT_TIMED_UDATE / 2
-  if (_aqconfig_.mqtt_timed_update) {
-    static int cnt=0;
-    if (cnt >= (MQTT_TIMED_UDATE/2)) {
-      static time_t last_full_update = 0;
-      time_t now = time(0); // get time now
-      if ( (int)difftime(now, last_full_update) > MQTT_TIMED_UDATE ) {
-        reset_last_mqtt_status();
-        memcpy(&last_full_update, &now, sizeof(time_t));
-      }
-      cnt = 0;
-    } else {
-      cnt++;
-    }
-  }
+  static struct timespec last_timer_update_timestamp = {0, 0};
 
 //LOG(NET_LOG,LOG_INFO, "mqtt_broadcast_aqualinkstate: START\n");
 
@@ -676,10 +736,29 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
     }
   //}
 
+  if (source_timestamp_publish_due(
+          _aqualink_data->panel_last_update,
+          _last_mqtt_aqualinkdata.panel_last_update,
+          _source_publish_times.panel, now)) {
+    _last_mqtt_aqualinkdata.panel_last_update = _aqualink_data->panel_last_update;
+    _source_publish_times.panel = now;
+    send_mqtt_timestamp_msg(nc, PANEL_LAST_UPDATE_TOPIC,
+                            _aqualink_data->panel_last_update);
+  }
+
   if (_aqualink_data->air_temp != TEMP_UNKNOWN && _aqualink_data->air_temp != _last_mqtt_aqualinkdata.air_temp) {
     _last_mqtt_aqualinkdata.air_temp = _aqualink_data->air_temp;
     send_mqtt_temp_msg(nc, AIR_TEMP_TOPIC, _aqualink_data->air_temp);
     //send_mqtt_temp_msg_new(nc, AIR_TEMPERATURE_TOPIC, _aqualink_data->air_temp);
+  }
+  if (source_timestamp_publish_due(
+          _aqualink_data->air_temp_last_update,
+          _last_mqtt_aqualinkdata.air_temp_last_update,
+          _source_publish_times.air_temp, now)) {
+    _last_mqtt_aqualinkdata.air_temp_last_update = _aqualink_data->air_temp_last_update;
+    _source_publish_times.air_temp = now;
+    send_mqtt_timestamp_msg(nc, AIR_TEMP_LAST_UPDATE_TOPIC,
+                            _aqualink_data->air_temp_last_update);
   }
 
   if (_aqualink_data->pool_temp != _last_mqtt_aqualinkdata.pool_temp) {
@@ -772,6 +851,15 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
     send_mqtt_numeric_msg(nc, CHEM_ORP_TOPIC, _aqualink_data->orp);
     send_mqtt_float_msg(nc, CHRM_ORP_F_TOPIC, roundf(degFtoC(_aqualink_data->orp)));
   }
+  if (source_timestamp_publish_due(
+          _aqualink_data->chemistry_last_update,
+          _last_mqtt_aqualinkdata.chemistry_last_update,
+          _source_publish_times.chemistry, now)) {
+    _last_mqtt_aqualinkdata.chemistry_last_update = _aqualink_data->chemistry_last_update;
+    _source_publish_times.chemistry = now;
+    send_mqtt_timestamp_msg(nc, CHEM_LAST_UPDATE_TOPIC,
+                            _aqualink_data->chemistry_last_update);
+  }
 
   // Salt Water Generator
   if (_aqualink_data->swg_led_state != LED_S_UNKNOWN) {
@@ -822,6 +910,15 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
   } else {
     //LOG(NET_LOG,LOG_DEBUG, "SWG Extended unknown\n");
   }
+  if (source_timestamp_publish_due(
+          _aqualink_data->swg_last_update,
+          _last_mqtt_aqualinkdata.swg_last_update,
+          _source_publish_times.swg, now)) {
+    _last_mqtt_aqualinkdata.swg_last_update = _aqualink_data->swg_last_update;
+    _source_publish_times.swg = now;
+    send_mqtt_timestamp_msg(nc, SWG_LAST_UPDATE_TOPIC,
+                            _aqualink_data->swg_last_update);
+  }
 
   if (READ_RSDEV_JXI && _aqualink_data->heater_err_status != _last_mqtt_aqualinkdata.heater_err_status) {
     char message[30];
@@ -863,12 +960,12 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
       clock_gettime(CLOCK_MONOTONIC, &current_time);
 
       // Calculate the time difference in nanoseconds
-      long long time_difference_ns = (current_time.tv_sec - last_update_timestamp.tv_sec) * 1000000000LL + (current_time.tv_nsec - last_update_timestamp.tv_nsec);
+      long long time_difference_ns = (current_time.tv_sec - last_timer_update_timestamp.tv_sec) * 1000000000LL + (current_time.tv_nsec - last_timer_update_timestamp.tv_nsec);
 
       // Check if 10 seconds (10 * 10^9 nanoseconds) have passed
-      if (time_difference_ns >= 10000000000LL || last_update_timestamp.tv_sec == 0) {
+      if (time_difference_ns >= 10000000000LL || last_timer_update_timestamp.tv_sec == 0) {
         send_mqtt_timer_state_msg(nc, _aqualink_data->aqbuttons[i].name, &_aqualink_data->aqbuttons[i]);
-        last_update_timestamp = current_time;
+        last_timer_update_timestamp = current_time;
       }
     }
   }
@@ -923,6 +1020,19 @@ void mqtt_broadcast_aqualinkstate(struct mg_connection *nc)
         pumpStatus != _last_mqtt_aqualinkdata.pumps[i].status) {
       _last_mqtt_aqualinkdata.pumps[i].status = pumpStatus;
       send_mqtt_aux_msg(nc, _aqualink_data->pumps[i].button->name, PUMP_STATUS_TOPIC, pumpStatus);
+    }
+    if (source_timestamp_publish_due(
+            _aqualink_data->pumps[i].last_update,
+            _last_mqtt_aqualinkdata.pumps[i].last_update,
+            _source_publish_times.pumps[i], now)) {
+      char topic[128];
+      snprintf(topic, sizeof(topic), "%s%s",
+               _aqualink_data->pumps[i].button->name, PUMP_LAST_UPDATE_TOPIC);
+      _last_mqtt_aqualinkdata.pumps[i].last_update =
+          _aqualink_data->pumps[i].last_update;
+      _source_publish_times.pumps[i] = now;
+      send_mqtt_timestamp_msg(nc, topic,
+                              _aqualink_data->pumps[i].last_update);
     }
   }
 
@@ -1301,9 +1411,9 @@ uriAtype action_URI(request_source from, const char *URI, int uri_length, float 
   } else if ((ri3 != NULL && (strncmp(ri1, "SWG", 3) == 0) && (strncasecmp(ri2, "Percent", 7) == 0) && (strncasecmp(ri3, "set", 3) == 0))) {
     int val;
     if ( (strncmp(ri2, "Percent_f", 9) == 0)  ) {
-      val = _aqualink_data->unactioned.value = round(degCtoF(value));
+      val = round(degCtoF(value));
     } else {
-      val = _aqualink_data->unactioned.value = round(value);
+      val = round(value);
     }
     //create_program_request(from, SWG_SETPOINT, val, 0);
     panel_device_request(_aqualink_data, SWG_SETPOINT, 0, val, from);
@@ -1556,8 +1666,13 @@ void action_mqtt_message(struct mg_connection *nc, struct mg_mqtt_message *msg) 
 #endif
   //unsigned int i;
   //LOG(NET_LOG,LOG_DEBUG, "MQTT: topic %.*s %.2f\n",msg->topic.len, msg->topic.buf, atof(msg->data.buf));
+  bool is_set = msg->topic.len >= 4 &&
+                strncmp(&msg->topic.buf[msg->topic.len - 4], "/set", 4) == 0;
+  bool is_increment = msg->topic.len >= 10 &&
+                      strncmp(&msg->topic.buf[msg->topic.len - 10],
+                              "/increment", 10) == 0;
   // If message doesn't end in set or increment we don't care about it.
-  if (strncmp(&msg->topic.buf[msg->topic.len -4], "/set", 4) != 0 && strncmp(&msg->topic.buf[msg->topic.len -10], "/increment", 10) != 0) {
+  if (!is_set && !is_increment) {
     LOG(NET_LOG,LOG_DEBUG, "MQTT: Ignore %.*s %.*s\n",msg->topic.len, msg->topic.buf, msg->data.len, msg->data.buf);
     return;
   }
@@ -1565,8 +1680,14 @@ void action_mqtt_message(struct mg_connection *nc, struct mg_mqtt_message *msg) 
 
   DEBUG_TIMER_START(&tid);
   //Need to do this in a better manor, but for present it's ok.
-  static char tmp[20];
-  strncpy(tmp, msg->data.buf, msg->data.len);
+  char tmp[20];
+  if (msg->data.len >= sizeof(tmp)) {
+    LOG(NET_LOG, LOG_WARNING,
+        "MQTT: Rejecting oversized payload of %zu bytes for '%.*s'\n",
+        msg->data.len, msg->topic.len, msg->topic.buf);
+    return;
+  }
+  memcpy(tmp, msg->data.buf, msg->data.len);
   tmp[msg->data.len] = '\0';
 
   //float value = atof(tmp);
@@ -1597,7 +1718,17 @@ void action_mqtt_message(struct mg_connection *nc, struct mg_mqtt_message *msg) 
   }
 
   bool convert = (_aqualink_data->temp_units != CELSIUS && _aqconfig_.convert_mqtt_temp)?true:false;
-  int offset = strlen(_aqconfig_.mqtt_aq_topic)+1;
+  size_t base_topic_length = strlen(_aqconfig_.mqtt_aq_topic);
+  if (msg->topic.len <= base_topic_length ||
+      memcmp(msg->topic.buf, _aqconfig_.mqtt_aq_topic,
+             base_topic_length) != 0 ||
+      msg->topic.buf[base_topic_length] != '/') {
+    LOG(NET_LOG, LOG_WARNING,
+        "MQTT: Rejecting command outside configured topic '%s': '%.*s'\n",
+        _aqconfig_.mqtt_aq_topic, msg->topic.len, msg->topic.buf);
+    return;
+  }
+  int offset = base_topic_length + 1;
   if ( action_URI(NET_MQTT, &msg->topic.buf[offset], msg->topic.len - offset, value, convert, &rtnmsg) == uBad ) {
     // Check if it was something that can't be changed, if so send back current state.  Homekit thermostat for SWG and Freezeprotect.
     if (  strncmp(&msg->topic.buf[offset], FREEZE_PROTECT, strlen(FREEZE_PROTECT)) == 0) {
@@ -2185,6 +2316,7 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
 
 void reset_last_mqtt_status()
 {
+  memset(&_source_publish_times, 0, sizeof(_source_publish_times));
   int i;
   memset(&_last_mqtt_aqualinkdata, 0, sizeof(_last_mqtt_aqualinkdata));
 
@@ -2234,6 +2366,35 @@ void reset_last_mqtt_status()
 
   _last_mqtt_chiller_led.state = LED_S_UNKNOWN;
 
+}
+
+static bool mqtt_timed_update_due()
+{
+  static struct timespec last_update = {0, 0};
+
+  if (!_aqconfig_.mqtt_timed_update) {
+    last_update.tv_sec = 0;
+    last_update.tv_nsec = 0;
+    return false;
+  }
+
+  struct timespec now;
+  if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+    return false;
+  }
+
+  if (last_update.tv_sec == 0) {
+    last_update = now;
+    return false;
+  }
+
+  if (now.tv_sec - last_update.tv_sec < MQTT_TIMED_UPDATE) {
+    return false;
+  }
+
+  last_update = now;
+  reset_last_mqtt_status();
+  return true;
 }
 
 void start_mqtt(struct mg_mgr *mgr) {
@@ -2373,8 +2534,12 @@ void *net_services_thread( void *ptr )
   {
     mg_mgr_poll(&_mgr, (_aqualink_data->simulator_active != SIM_NONE)?10:100);
 
-    if (aqdata->is_dirty == true /*|| _broadcast == true*/) {
+    bool timed_mqtt_update = mqtt_timed_update_due();
+    bool timestamp_update = source_timestamp_update_due(aqdata);
+    if (aqdata->is_dirty == true || timed_mqtt_update || timestamp_update) {
       _broadcast_aqualinkstate(_mgr.conns);
+      if (timestamp_update)
+        mark_source_timestamps_broadcast(aqdata);
       CLEAR_DIRTY(aqdata->is_dirty);
 #ifdef DEBUG_SET_IF_CHANGED
       printf("NO updates for %d loops\n",noupdate), noupdate=0;
@@ -2448,8 +2613,13 @@ bool start_net_services(struct aqualinkdata *aqdata)
 
   LOG(NET_LOG,LOG_NOTICE, "Starting network services thread\n");
 
-  if( pthread_create( &_net_thread_id , NULL ,  net_services_thread, (void*)aqdata) < 0) {
-    LOG(NET_LOG, LOG_ERR, "could not create network thread\n");
+  int rc = pthread_create(&_net_thread_id, NULL, net_services_thread,
+                          (void *)aqdata);
+  if (rc != 0) {
+    LOG(NET_LOG, LOG_ERR, "could not create network thread: %s\n",
+        strerror(rc));
+    _net_thread_id = 0;
+    _keepNetServicesRunning = false;
     return false;
   }
 
@@ -2457,6 +2627,3 @@ bool start_net_services(struct aqualinkdata *aqdata)
 
   return true;
 }
-
-
-

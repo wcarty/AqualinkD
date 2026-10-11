@@ -33,6 +33,7 @@
 #include "mongoose.h"
 #include "aqualink.h"
 #include "utils.h"
+#include "telemetry.h"
 #include "config.h"
 #include "aq_serial.h"
 #include "aq_panel.h"
@@ -274,7 +275,10 @@ void action_delayed_request()
   // If we don't know the units yet, we can't action setpoint, so wait until we do.
   if (_aqualink_data.temp_units == UNKNOWN && 
      (_aqualink_data.unactioned.type == POOL_HTR_SETPOINT || _aqualink_data.unactioned.type == SPA_HTR_SETPOINT || _aqualink_data.unactioned.type == FREEZE_SETPOINT || _aqualink_data.unactioned.type == CHILLER_SETPOINT))
+  {
+    defer_action_request(&_aqualink_data);
     return;
+  }
 
   if (_aqualink_data.unactioned.type == POOL_HTR_SETPOINT)
   {
@@ -443,10 +447,7 @@ void action_delayed_request()
     LOG(AQUA_LOG,LOG_ERR, "Unknown request of type %d\n", _aqualink_data.unactioned.type);
   }
 
-  _aqualink_data.unactioned.type = NO_ACTION;
-  _aqualink_data.unactioned.value = -1;
-  _aqualink_data.unactioned.id = -1;
-  _aqualink_data.unactioned.requested = 0;
+  complete_action_request(&_aqualink_data);
 }
 
 void printHelp()
@@ -846,7 +847,9 @@ void main_loop()
   _aqualink_data.is_display_message_programming = false;
   //_aqualink_data.simulate_panel = false;
   _aqualink_data.active_thread.thread_id = 0;
+  _aqualink_data.panel_last_update = 0;
   _aqualink_data.air_temp = TEMP_UNKNOWN;
+  _aqualink_data.air_temp_last_update = 0;
   _aqualink_data.pool_temp = TEMP_UNKNOWN;
   _aqualink_data.spa_temp = TEMP_UNKNOWN;
   _aqualink_data.frz_protect_set_point = TEMP_UNKNOWN;
@@ -854,9 +857,19 @@ void main_loop()
   _aqualink_data.spa_htr_set_point = TEMP_UNKNOWN;
   _aqualink_data.chiller_set_point = TEMP_UNKNOWN;
   //_aqualink_data.chiller_state = LED_S_UNKNOWN;
+  int action_mutex_result =
+      pthread_mutex_init(&_aqualink_data.action_mutex, NULL);
+  if (action_mutex_result != 0) {
+    LOG(AQUA_LOG, LOG_ERR, "Could not initialize action queue mutex: %s\n",
+        strerror(action_mutex_result));
+    exit(EXIT_FAILURE);
+  }
   _aqualink_data.unactioned.type = NO_ACTION;
+  _aqualink_data.action_in_progress = false;
+  _aqualink_data.action_queue_count = 0;
   _aqualink_data.swg_percent = TEMP_UNKNOWN;
   _aqualink_data.swg_ppm = TEMP_UNKNOWN;
+  _aqualink_data.swg_last_update = 0;
   _aqualink_data.ar_swg_device_status = SWG_STATUS_UNKNOWN;
   _aqualink_data.heater_err_status = NUL; // 0x00 is no error
   _aqualink_data.swg_led_state = LED_S_UNKNOWN;
@@ -868,6 +881,7 @@ void main_loop()
   _aqualink_data.open_websockets = 0;
   _aqualink_data.ph = TEMP_UNKNOWN;
   _aqualink_data.orp = TEMP_UNKNOWN;
+  _aqualink_data.chemistry_last_update = 0;
   _aqualink_data.simulator_id = NUL;
   _aqualink_data.simulator_active = SIM_NONE;
   _aqualink_data.boost_duration = 0;
@@ -882,6 +896,7 @@ void main_loop()
     _aqualink_data.pumps[i].rpm = TEMP_UNKNOWN;
     _aqualink_data.pumps[i].gpm = TEMP_UNKNOWN;
     _aqualink_data.pumps[i].watts = TEMP_UNKNOWN;
+    _aqualink_data.pumps[i].last_update = 0;
     _aqualink_data.pumps[i].mode = TEMP_UNKNOWN;
     //_aqualink_data.pumps[i].driveState = TEMP_UNKNOWN;
     _aqualink_data.pumps[i].status = TEMP_UNKNOWN;
@@ -1129,7 +1144,8 @@ void main_loop()
 
   //At this point we should have correct ID and seen probes on those ID's.
   // Setup the panel
-  if (_aqconfig_.device_id <= 0x08 && _aqconfig_.device_id >= 0x0B && _aqconfig_.device_id != 0x60 && _aqconfig_.device_id != 0x33) {
+  if ((_aqconfig_.device_id < 0x08 || _aqconfig_.device_id > 0x0B) &&
+      _aqconfig_.device_id != 0x60 && _aqconfig_.device_id != 0x33) {
     LOG(AQUA_LOG,LOG_ERR, "Aqualink daemon has no valid device_id, can't connect to control panel");
     //_aqualink_data.panelstatus = NO_IDS_ERROR;
     RemoveAQDstatusMask(CONNECTING); // Not sure if we should remove this
@@ -1319,6 +1335,7 @@ void main_loop()
            ))
       {
         AddAQDstatusMask(CONNECTED);
+        update_panel_timestamp(&_aqualink_data, time(NULL));
         switch(getJandyDeviceType(packet_buffer[PKT_DEST])){
           case ALLBUTTON:
             process_allbutton_packet(packet_buffer, packet_length, &_aqualink_data);
@@ -1384,15 +1401,11 @@ void main_loop()
       }
     }
     // Any unactioned commands
-    if (_aqualink_data.unactioned.type != NO_ACTION)
-    {
-      time_t now;
-      time(&now);
-      if (difftime(now, _aqualink_data.unactioned.requested) > 2)
-      {
-        LOG(AQUA_LOG,LOG_DEBUG, "Actioning delayed request\n");
-        action_delayed_request();
-      }
+    time_t now;
+    time(&now);
+    if (begin_action_request(&_aqualink_data, now)) {
+      LOG(AQUA_LOG,LOG_DEBUG, "Actioning delayed request\n");
+      action_delayed_request();
     }
 
     
