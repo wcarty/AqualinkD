@@ -26,6 +26,7 @@ All notable changes to AqualinkD are documented here. Releases are listed in rev
 * Modernized the main dashboard with responsive cards, updated light and dark palettes, automatic system-theme selection, improved typography and spacing, and mobile-friendly option panes.
 * Added hover, active, reduced-motion, and keyboard-focus behavior for equipment controls.
 * Kept chemistry, temperature, salt-level, and other value tiles read-only so clicking them no longer sends invalid equipment commands.
+* Moved inline styling to `web/aqualinkd.css` and split the portal JavaScript into ordered configuration, equipment, scheduler, status, network, and application assets under `web/js/`.
 * Preserved existing equipment IDs, WebSocket/API behavior, long-press controls, and live `config.json` device settings.
 
 ### Related Home Assistant configuration
