@@ -14,6 +14,7 @@ All notable changes to AqualinkD are documented here. Releases are listed in rev
 * Added delayed source-timestamp publication so the newest timestamp is published within 30 seconds even when acquisitions stop.
 * Removed timestamp-only updates from the expensive global dirty-status path while retaining MQTT and WebSocket freshness updates.
 * Hardened sensor reads, worker synchronization, thread creation checks, malformed OneTouch messages, and device-ID validation.
+* Corrected the live CPU-load sensor from `sensor_03` to `sensor_01` and removed its duplicate factor, eliminating two empty sensor slots without changing its `Aux_S1` identity.
 * Updated the packaged systemd unit to wait for `network-online.target` and restart on failure.
 * Added repeatable telemetry and chemistry regression tests through `make test`.
 
@@ -47,6 +48,8 @@ These settings are external to this repository but are recorded here for operati
   `/var/backups/aqualinkd/20261011T141714Z-89c853f-web-portal`
 * Read-only tile fix rollback:
   `/var/backups/aqualinkd/20261011T143234Z-c465cf5-readonly-tiles`
+* Sensor configuration rollback:
+  `/var/backups/aqualinkd/20261011T144032Z-sensor-config`
 
 ---
 
