@@ -51,6 +51,8 @@ These settings are external to this repository but are recorded here for operati
   `/var/backups/aqualinkd/20261011T143234Z-c465cf5-readonly-tiles`
 * Sensor configuration rollback:
   `/var/backups/aqualinkd/20261011T144032Z-sensor-config`
+* Frontend module separation rollback:
+  `/var/backups/aqualinkd/20261011T145906Z-5659b17-frontend-modules`
 
 ---
 
