@@ -4,6 +4,52 @@ All notable changes to AqualinkD are documented here. Releases are listed in rev
 
 ---
 
+## wcarty fork updates (October 11, 2026)
+
+### Reliability and safety hardening
+* Bounded MQTT command topics and payloads, validated configured topics, and safely terminated incoming data.
+* Replaced the cross-thread command mailbox with a mutex-protected 16-entry queue that retains slider-command coalescing and reports queue overflow.
+* Bounded status JSON generation and increased the status buffer for the expanded telemetry payload.
+* Corrected AquaLink Touch page clearing so stale rows cannot refresh chemistry acquisition timestamps.
+* Added delayed source-timestamp publication so the newest timestamp is published within 30 seconds even when acquisitions stop.
+* Removed timestamp-only updates from the expensive global dirty-status path while retaining MQTT and WebSocket freshness updates.
+* Hardened sensor reads, worker synchronization, thread creation checks, malformed OneTouch messages, and device-ID validation.
+* Updated the packaged systemd unit to wait for `network-online.target` and restart on failure.
+* Added repeatable telemetry and chemistry regression tests through `make test`.
+
+### Telemetry
+* Added panel, air-temperature, chemistry, filter-pump, and salt-water-generator acquisition timestamps and ages.
+* Exposed source freshness through the HTTP status API, MQTT, WebSocket updates, and Home Assistant discovery.
+
+### Web portal
+* Modernized the main dashboard with responsive cards, updated light and dark palettes, automatic system-theme selection, improved typography and spacing, and mobile-friendly option panes.
+* Added hover, active, reduced-motion, and keyboard-focus behavior for equipment controls.
+* Kept chemistry, temperature, salt-level, and other value tiles read-only so clicking them no longer sends invalid equipment commands.
+* Preserved existing equipment IDs, WebSocket/API behavior, long-press controls, and live `config.json` device settings.
+
+### Related Home Assistant configuration
+
+These settings are external to this repository but are recorded here for operational traceability:
+
+* Updated the pool dashboard with circulation, dosing-controller, relay, interlock, and acquisition-freshness status.
+* Corrected the ORP gauge so 650–850 mV is the target range and readings above 850 mV receive the high warning.
+* Retained the conservative pH dosing table, 30-minute evaluation schedule, source-freshness interlocks, relay settling checks, daily allowance, and independent watchdog.
+
+### Commits and deployment records
+* `e42d847` — Harden command handling and telemetry reliability.
+* `7cabb79` — Merge chemistry reliability hardening into fork `master`.
+* `20f50d1` — Modernize web portal dashboard.
+* `89c853f` — Merge modernized web portal into fork `master`.
+* `c465cf5` — Keep value tiles read-only.
+* Native ARM64 hardening deployment rollback:
+  `/var/backups/aqualinkd/20261011T140028Z-e42d847-hardening`
+* Web portal deployment rollback:
+  `/var/backups/aqualinkd/20261011T141714Z-89c853f-web-portal`
+* Read-only tile fix rollback:
+  `/var/backups/aqualinkd/20261011T143234Z-c465cf5-readonly-tiles`
+
+---
+
 ## Release 3.1.0 (April 2026)
 * added device power to watts in MQTT discovery for power monitoring
 * Updated timers to be finer grained, (seconds vs minutes). - ie support for dosing pumps.
