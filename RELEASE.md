@@ -28,6 +28,7 @@ All notable changes to AqualinkD are documented here. Releases are listed in rev
 * Kept chemistry, temperature, salt-level, and other value tiles read-only so clicking them no longer sends invalid equipment commands.
 * Moved inline styling to `web/aqualinkd.css` and split the portal JavaScript into ordered configuration, equipment, scheduler, status, network, and application assets under `web/js/`.
 * Restyled the management console with responsive desktop/mobile layouts, modern control panels, improved forms and dialogs, and a clearer log viewer without changing management commands.
+* Added an explicit top-level link from the management console back to the pool dashboard.
 * Preserved existing equipment IDs, WebSocket/API behavior, long-press controls, and live `config.json` device settings.
 
 ### Related Home Assistant configuration

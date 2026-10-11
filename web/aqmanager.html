@@ -612,6 +612,35 @@
     letter-spacing: -0.015em;
   }
 
+  .manager_nav_button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 7px 14px;
+    box-sizing: border-box;
+    color: var(--manager-primary);
+    background: #e0f2fe;
+    border: 1px solid #7dd3fc;
+    border-radius: 9px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+  }
+
+  .manager_nav_button:hover {
+    color: #fff;
+    background: var(--manager-primary);
+    border-color: var(--manager-primary);
+    transform: translateY(-1px);
+  }
+
+  .manager_nav_button:focus-visible {
+    outline: 3px solid rgba(14, 165, 233, 0.32);
+    outline-offset: 2px;
+  }
+
   .statusmsg {
     width: 100%;
     color: var(--manager-muted);
@@ -2712,6 +2741,9 @@
         <table border='0' id="deviceList" style="width: 100%;">
           <tr style="title">
             <td colspan="2" style="title" align="center"><label id="title">&nbsp;&nbsp;AqualinkD Management Console&nbsp;&nbsp;</label></th>
+          </tr>
+          <tr>
+            <td colspan="2" align="center"><a class="manager_nav_button" href="/" target="_top" aria-label="Back to Pool Dashboard">&larr; Back to Pool Dashboard</a></td>
           </tr>
           <tr>
             <td colspan="2" align="center"><label id="statusmsg" class="statusmsg">status</label></td>
